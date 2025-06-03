@@ -1,0 +1,4 @@
+Faker==37.3.0
+numpy==2.2.6
+-e git+https://github.com/tinygrad/tinygrad.git@4381b545431b28ccba25bfc3c861ace9614b3b59#egg=tinygrad
+tzdata==2025.2
