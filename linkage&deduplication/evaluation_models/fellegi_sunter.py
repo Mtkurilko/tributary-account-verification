@@ -21,7 +21,7 @@ def fellegi_sunter_probability(subject1, subject2, m_probs, u_probs):
 
     score = 0.0000001  # Initialize score to a small value to avoid log(0)
     # List of features to compare
-    features = ['first_name', 'middle_name', 'last_name', 'dob', 'email', 'birth_city']
+    features = ['first_name', 'middle_name', 'last_name', 'dob', 'dod', 'email', 'birth_city']
 
     for feature in features:
         attr1 = normalize_string(getattr(subject1, feature, None)) if isinstance(getattr(subject1, feature, None), str) else getattr(subject1, feature, None) # Uniform case handling for string attributes
