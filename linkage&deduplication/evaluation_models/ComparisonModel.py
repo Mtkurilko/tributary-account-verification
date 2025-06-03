@@ -146,7 +146,7 @@ class ComparisonModel:
 # gb_score = model.gradient_boosted_score(subject1, subject2)
 # transformer_score = model.transformer_similarity(subject1, subject2)
 
-"""
+'''
 # Train your model
 model = ComparisonModel()
 model.train_transformer(subject_pairs, labels, epochs=20, lr=1e-3)
@@ -162,4 +162,4 @@ model.load("transformer_weights.npz")
 # Now you can use the trained model for inference
 score = model.transformer_similarity(subject1, subject2)
 print("Similarity score:", score)
-"""
+'''
