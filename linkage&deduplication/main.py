@@ -14,32 +14,34 @@ def main():
         middle_name="A.",
         last_name="Doe",
         dob="1990-01-01",
-        email="JohnDoe@gmail.com"
+        email="JohnDoe@gmail.com",
+        birth_city="New York"
     )
     subject2 = Subject(
         first_name="John",
-        middle_name="L.",
+        middle_name="A.",
         last_name="Doe",
-        dob="1990-04-01",
-        email="JohnDoe@gmail.com"
+        dob="1990-01-01",
+        email="JohnDoe@gmail.com",
+        birth_city="New York"
     )
 
-    # Example m and u probabilities
+    # Example m and u probabilities (6/3/2025 - MORE REFINED match and unique probabilities)
     m_probs = {
         'first_name': 0.9,
         'middle_name': 0.8,
         'last_name': 0.95,
-        'dob': 0.85,
-        'email': 0.9,
-        'birth_city': 0.7
+        'dob': 0.98,
+        'email': 0.99,
+        'birth_city': 0.9
     }
     u_probs = {
         'first_name': 0.1,
         'middle_name': 0.2,
-        'last_name': 0.05,
-        'dob': 0.15,
-        'email': 0.1,
-        'birth_city': 0.3
+        'last_name': 0.005,
+        'dob': 0.005,
+        'email': 0.3,
+        'birth_city': 0.05
     }
 
     # Calculate the probability of a match
