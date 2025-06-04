@@ -19,14 +19,14 @@ class ComparisonModel:
         self.vocab_size = 256  # Byte-level encoding
 
         # Embedding matrix (vocab_size x embedding_dim)
-        self.embeddings = Tensor.uniform(self.vocab_size, self.embedding_dim)
+        self.embeddings = Tensor.uniform(self.vocab_size, self.embedding_dim, low=-0.1, high=0.1)
 
         # Simple transformer weights (single self-attention head for demonstration)
-        self.attn_wq = Tensor.uniform(self.embedding_dim, self.embedding_dim)
-        self.attn_wk = Tensor.uniform(self.embedding_dim, self.embedding_dim)
-        self.attn_wv = Tensor.uniform(self.embedding_dim, self.embedding_dim)
-        self.ffn_w1 = Tensor.uniform(self.embedding_dim, self.embedding_dim)
-        self.ffn_w2 = Tensor.uniform(self.embedding_dim, self.embedding_dim)
+        self.attn_wq = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1)
+        self.attn_wk = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1)
+        self.attn_wv = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1)
+        self.ffn_w1 = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1)
+        self.ffn_w2 = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1)
 
     def gradient_boosted_score(self, subject1, subject2):
         features = ['first_name', 'middle_name', 'last_name', 'dob', 'dod', 'email', 'birth_city']
@@ -109,18 +109,24 @@ class ComparisonModel:
             self.embeddings, self.attn_wq, self.attn_wk, self.attn_wv, self.ffn_w1, self.ffn_w2
         ]
         opt = SGD(params, lr=lr)
-        for epoch in range(epochs):
-            total_loss = 0.0
-            for (subj1, subj2), label in zip(subject_pairs, labels):
-                pred = self.transformer_similarity_tensor(subj1, subj2)
-                target = Tensor([label], requires_grad=False)
-                # Binary cross-entropy loss
-                loss = -(target * pred.log() + (1 - target) * (1 - pred).log()).mean()
-                opt.zero_grad()
-                loss.backward()
-                opt.step()
-                total_loss += float(loss.item())
-            print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss/len(subject_pairs):.4f}")
+        eps = 1e-7
+        with Tensor.train():
+            for epoch in range(epochs):
+                total_loss = 0.0
+                for (subj1, subj2), label in zip(subject_pairs, labels):
+                    pred = self.transformer_similarity_tensor(subj1, subj2)
+                    pred = pred.clamp(eps, 1 - eps)  # Avoid log(0) issues
+                    target = Tensor([label], requires_grad=False)
+                    # Binary cross-entropy loss
+                    loss = -(target * pred.log() + (1 - target) * (1 - pred).log()).mean()
+                    opt.zero_grad()
+                    loss.backward()
+                    opt.step()
+                    total_loss += float(loss.item())
+                    if np.isnan(float(loss.item())): # Check for NaN in loss
+                        print("NaN detected in loss, stopping training.")
+                        break
+                print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss/len(subject_pairs):.4f}")
     
     def save(self, path):
         np.savez(path,
