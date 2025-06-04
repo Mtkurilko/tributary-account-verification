@@ -770,7 +770,7 @@ def generate_sequences(
             json_sequence = []
             for uid, metadata, step_index in sequence:
                 json_sequence.append(
-                    {"uuid": uid, "metadata": metadata, "step_index": step_index}
+                    {"node_id": uid, "metadata": metadata, "step_index": step_index}
                 )
             json_sequences.append(json_sequence)
 
