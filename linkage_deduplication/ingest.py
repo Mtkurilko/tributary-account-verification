@@ -4,7 +4,7 @@ Date: 6/4/2025
 Description: This script runs the ingestion process that grabs data from the dataset.json file and prepares it for the comaprison model.
 '''
 
-from Subject import Subject
+from .Subject import Subject
 import json
 
 def ingest_data(file_path):
@@ -77,4 +77,4 @@ def read_json(file_path):
     :return: Parsed JSON data.
     """
     with open(file_path, 'r') as file:
-        return json.load(file).get('nodes') if 'nodes' in json.load(file) else json.load(file)
+        return json.load(file).get('nodes')
