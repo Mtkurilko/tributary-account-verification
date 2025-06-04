@@ -58,7 +58,7 @@ def obtain_subject_labels(subject_pairs):
 
     for subj1, subj2 in subject_pairs:
         # Check if the base_ids (the unqiue identifier variants are based on) are the same
-        if subj1.attributes.get('base_id') == subj2.attributes.get('base_id'):
+        if (subj1.attributes.get('base_id') == subj2.attributes.get('base_id')) and subj1.attributes.get('base_id') is not None:
             label = 1
         else:
             label = 0

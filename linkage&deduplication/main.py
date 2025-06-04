@@ -36,6 +36,8 @@ def main():
     path = input("Enter the path to the dataset (dataset.json): ").strip()
 
     subjects, subject_pairs  = ingest.ingest_data(path)  # Load subjects and pairs from dataset
+
+    labels = ingest.obtain_subject_labels(subject_pairs)  # Obtain labels for the subject pairs
     
     # Ask the user if they want to use the ComparisonModel
     model_requested = int(input("Do you want to use 1) ComparisonModel or 2) Fellegi-Sunter model? (Enter 1 or 2): "))
@@ -55,7 +57,6 @@ def main():
         train_model = input("Do you want to train the model? (Y/N): ").strip().lower()
         if train_model == 'y':
             # Subject pair arew tuples of (subject1, subject2) and already created
-            labels = ingest.obtain_subject_labels(subject_pairs)  # Obtain labels for the subject pairs
 
             #Train the model with the subject pairs and labels
             model.train_transformer(subject_pairs, labels, epochs=20, lr=1e-3)
@@ -68,14 +69,14 @@ def main():
                 print(f"Model saved to {path}")
 
         # Run through each pair of subjects in the dataset
-        for subject1, subject2 in subject_pairs:
+        for i, (subject1, subject2) in enumerate(subject_pairs):
             # Calculate the gradient-boosted score
             gb_score = model.gradient_boosted_score(subject1, subject2)
-            print(f"Gradient Boosted Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {gb_score:.4f}")
+            print(f"Gradient Boosted Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {gb_score:.4f} | (Match: {'Yes' if (labels[i] == 1) else 'No'})")
             
             # Calculate the transformer similarity score
             transformer_score = model.transformer_similarity(subject1, subject2)
-            print(f"Transformer Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {transformer_score:.4f}")
+            print(f"Transformer Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {transformer_score:.4f} | (Match: {'Yes' if (labels[i] == 1) else 'No'})")
 
     elif model_requested == 2:
         # Example m and u probabilities (6/3/2025 - MORE REFINED match and unique probabilities)
@@ -99,10 +100,10 @@ def main():
         }
 
         # Run through each pair of subjects in the dataset
-        for subject1, subject2 in subject_pairs:
+        for i, (subject1, subject2) in enumerate(subject_pairs):
             # Calculate the probability of a match
             probability = fs_prob(subject1, subject2, m_probs, u_probs)
-            print(f"Felligi-Sunter Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {probability:.4f}")
+            print(f"Felligi-Sunter Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {probability:.4f}  | (Match: {'Yes' if (labels[i] == 1) else 'No'})")
     
 if __name__ == "__main__":
     main()
