@@ -78,6 +78,9 @@ def main():
             transformer_score = model.transformer_similarity(subject1, subject2)
             print(f"Transformer Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {transformer_score:.4f} | (Match: {'Yes' if (labels[i] == 1) else 'No'})")
 
+            # Print a separator for clarity
+            print("-" * 80)
+
     elif model_requested == 2:
         # Example m and u probabilities (6/3/2025 - MORE REFINED match and unique probabilities)
         m_probs = {

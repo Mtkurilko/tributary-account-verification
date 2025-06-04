@@ -77,4 +77,4 @@ def read_json(file_path):
     :return: Parsed JSON data.
     """
     with open(file_path, 'r') as file:
-        return json.load(file).get('nodes')
+        return json.load(file).get('nodes') if 'nodes' in json.load(file) else json.load(file)
