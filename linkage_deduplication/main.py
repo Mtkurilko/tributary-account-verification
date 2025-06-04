@@ -95,13 +95,17 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
 
         # Run through each pair of subjects in the dataset
         for i, (subject1, subject2) in enumerate(subject_pairs):
+            # Create a matched f-string for output
+            matched = f'Yes Base_ID:{subject2.attributes.get('base_id')}'
+
             # Calculate the gradient-boosted score
             gb_score = model.gradient_boosted_score(subject1, subject2)
-            print(f"Gradient Boosted Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {gb_score:.4f} | (Match: {f'Yes Base_ID:{subject2.attributes.get('base_id')}' if (labels[i] == 1) else 'No'})")
+            
+            print(f"Gradient Boosted Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {gb_score:.4f} | (Match: {matched if (labels[i] == 1) else 'No'})")
             
             # Calculate the transformer similarity score
             transformer_score = model.transformer_similarity(subject1, subject2)
-            print(f"Transformer Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {transformer_score:.4f} | (Match: {f'Yes Base_ID:{subject2.attributes.get('base_id')}' if (labels[i] == 1) else 'No'})")
+            print(f"Transformer Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {transformer_score:.4f} | (Match: {matched if (labels[i] == 1) else 'No'})")
 
             # Print a separator for clarity
             print("-" * 80)
@@ -109,9 +113,12 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
     elif model_requested == 2:
         # Run through each pair of subjects in the dataset
         for i, (subject1, subject2) in enumerate(subject_pairs):
+            # Create a matched f-string for output
+            matched = f'Yes Base_ID:{subject2.attributes.get('base_id')}'
+
             # Calculate the probability of a match
             probability = fs_prob(subject1, subject2, m_probs, u_probs)
-            print(f"Felligi-Sunter Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {probability:.4f}  | (Match: {f'Yes Base_ID:{subject2.attributes.get('base_id')}' if (labels[i] == 1) else 'No'})")
+            print(f"Felligi-Sunter Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {probability:.4f}  | (Match: {matched if (labels[i] == 1) else 'No'})")
     
     elif model_requested == 3:
         # Initialize the ComparisonModel
@@ -140,17 +147,20 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
 
         # Run through each pair of subjects in the dataset
         for i, (subject1, subject2) in enumerate(subject_pairs):
+            # Create a matched f-string for output
+            matched = f'Yes Base_ID:{subject2.attributes.get('base_id')}'
+
             # Calculate the gradient-boosted score
             gb_score = model.gradient_boosted_score(subject1, subject2)
-            print(f"Gradient Boosted Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {gb_score:.4f} | (Match: {f'Yes Base_ID:{subject2.attributes.get('base_id')}' if (labels[i] == 1) else 'No'})")
+            print(f"Gradient Boosted Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {gb_score:.4f} | (Match: {matched if (labels[i] == 1) else 'No'})")
             
             # Calculate the transformer similarity score
             transformer_score = model.transformer_similarity(subject1, subject2)
-            print(f"Transformer Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {transformer_score:.4f} | (Match: {f'Yes Base_ID:{subject2.attributes.get('base_id')}' if (labels[i] == 1) else 'No'})")
+            print(f"Transformer Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {transformer_score:.4f} | (Match: {matched if (labels[i] == 1) else 'No'})")
     
             # Calculate Fellegi-Sunter probability
             probability = fs_prob(subject1, subject2, m_probs, u_probs)
-            print(f"Felligi-Sunter Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {probability:.4f}  | (Match: {f'Yes Base_ID:{subject2.attributes.get('base_id')}' if (labels[i] == 1) else 'No'})")
+            print(f"Felligi-Sunter Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {probability:.4f}  | (Match: {matched if (labels[i] == 1) else 'No'})")
     
             # Print a separator for clarity
             print("-" * 80)
