@@ -96,7 +96,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
         # Run through each pair of subjects in the dataset
         for i, (subject1, subject2) in enumerate(subject_pairs):
             # Create a matched f-string for output
-            matched = f'Yes Base_ID:{subject2.attributes.get('base_id')}'
+            matched = f"Yes Base_ID:{subject2.attributes.get('base_id')}"
 
             # Calculate the gradient-boosted score
             gb_score = model.gradient_boosted_score(subject1, subject2)
@@ -114,7 +114,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
         # Run through each pair of subjects in the dataset
         for i, (subject1, subject2) in enumerate(subject_pairs):
             # Create a matched f-string for output
-            matched = f'Yes Base_ID:{subject2.attributes.get('base_id')}'
+            matched = f"Yes Base_ID:{subject2.attributes.get('base_id')}"
 
             # Calculate the probability of a match
             probability = fs_prob(subject1, subject2, m_probs, u_probs)
@@ -148,7 +148,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
         # Run through each pair of subjects in the dataset
         for i, (subject1, subject2) in enumerate(subject_pairs):
             # Create a matched f-string for output
-            matched = f'Yes Base_ID:{subject2.attributes.get('base_id')}'
+            matched = f"Yes Base_ID:{subject2.attributes.get('base_id')}"
 
             # Calculate the gradient-boosted score
             gb_score = model.gradient_boosted_score(subject1, subject2)
