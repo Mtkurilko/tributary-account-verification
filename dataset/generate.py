@@ -764,18 +764,23 @@ def generate_sequences(
             print(f"  generated {i + 1}/{num_sequences} sequences")
 
     if output_file:
-        # convert to json-serializable format
-        json_sequences = []
-        for sequence in sequences:
-            json_sequence = []
-            for uid, metadata, step_index in sequence:
-                json_sequence.append(
-                    {"node_id": uid, "metadata": metadata, "step_index": step_index}
-                )
-            json_sequences.append(json_sequence)
+        # initialize database for proper schema (without path to avoid loading existing file)
+        db = GraphDatabase()
 
-        with open(output_file, "w") as f:
-            json.dump(json_sequences, f, indent=2)
+        # add all sequence nodes to database with sequence metadata
+        for sequence_idx, sequence in enumerate(sequences):
+            for uid, metadata, step_index in sequence:
+                # add sequence information to metadata
+                enhanced_metadata = metadata.copy()
+                enhanced_metadata["sequence_id"] = sequence_idx
+                enhanced_metadata["sequence_step"] = step_index
+                enhanced_metadata["total_sequences"] = num_sequences
+                enhanced_metadata["steps_per_sequence"] = steps_per_sequence
+
+                db.add_node(uid, enhanced_metadata)
+
+        # save using database schema (nodes and edges format)
+        db.save(output_file)
         print(f"sequences saved to {output_file}")
 
     return sequences
