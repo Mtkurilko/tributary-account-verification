@@ -24,6 +24,7 @@ def ingest_data(file_path):
     data = read_json(file_path) # Read the JSON data from the file
 
     for item in data:
+        uuid = item.get('node_id') # Extract the unique identifier for the subject
         item = item.get('metadata', item) # Grab the metadata from the dataset
 
         subject = Subject(
@@ -34,7 +35,7 @@ def ingest_data(file_path):
             dod=item.get('date_of_death', None),
             email=item.get('email'),
             birth_city=item.get('birth_city', None),
-            attributes={'base_id': item.get('base_uuid')} if ('base_uuid' in item) else {}  # Additional attributes if any
+            attributes={'base_id': item.get('base_uuid', None), 'uuid': uuid} # Additional attributes if any
         )
         subjects.append(subject)
     

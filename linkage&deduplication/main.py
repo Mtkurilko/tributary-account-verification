@@ -13,16 +13,16 @@ def main():
     '''
     # Example subjects
     subject1 = Subject(
-        first_name="Richard",
+        first_name="Michael",
         middle_name="L.",
         last_name="Jenkins",
         dob="1973-07-04",
         dod="1999-12-31",
-        email="RLJ98@aol.com",
+        email="RLJ98@hotmail.com",
         birth_city="Ohio",
     )
     subject2 = Subject(
-        first_name="Richard",
+        first_name="Micheal",
         middle_name="L.",
         last_name="Jankins",
         dob="1973-07-05",
@@ -32,7 +32,10 @@ def main():
     )
     '''
 
-    subjects, subject_pairs  = ingest.ingest_data("dataset.json")  # Load subjects and pairs from dataset.json
+    # Prompt the user for the path to the dataset
+    path = input("Enter the path to the dataset (dataset.json): ").strip()
+
+    subjects, subject_pairs  = ingest.ingest_data(path)  # Load subjects and pairs from dataset
     
     # Ask the user if they want to use the ComparisonModel
     model_requested = int(input("Do you want to use 1) ComparisonModel or 2) Fellegi-Sunter model? (Enter 1 or 2): "))
@@ -68,11 +71,11 @@ def main():
         for subject1, subject2 in subject_pairs:
             # Calculate the gradient-boosted score
             gb_score = model.gradient_boosted_score(subject1, subject2)
-            print(f"Gradient Boosted Score between {subject1.first_name} and {subject2.first_name}: {gb_score:.4f}")
+            print(f"Gradient Boosted Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {gb_score:.4f}")
             
             # Calculate the transformer similarity score
             transformer_score = model.transformer_similarity(subject1, subject2)
-            print(f"Transformer Similarity Score between {subject1.first_name} and {subject2.first_name}: {transformer_score:.4f}")
+            print(f"Transformer Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {transformer_score:.4f}")
 
     elif model_requested == 2:
         # Example m and u probabilities (6/3/2025 - MORE REFINED match and unique probabilities)
@@ -99,7 +102,7 @@ def main():
         for subject1, subject2 in subject_pairs:
             # Calculate the probability of a match
             probability = fs_prob(subject1, subject2, m_probs, u_probs)
-            print(f"Felligi-Sunter Similarity Score between {subject1.first_name} and {subject2.first_name}: {probability:.4f}")
+            print(f"Felligi-Sunter Similarity Score between {subject1.attributes.get('uuid')} and {subject2.attributes.get('uuid')}: {probability:.4f}")
     
 if __name__ == "__main__":
     main()
