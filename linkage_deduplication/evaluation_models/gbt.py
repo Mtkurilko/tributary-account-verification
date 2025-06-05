@@ -5,7 +5,6 @@ gradient boosted tree implementation for pytorch
 import torch
 import torch.nn as nn
 import numpy as np
-from typing import List, Tuple, Optional
 import pickle
 
 
@@ -164,6 +163,7 @@ class GradientBoostedTrees:
         min_samples_split=2,
         min_samples_leaf=1,
         device=None,
+        verbose=True,
     ):
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
@@ -172,26 +172,55 @@ class GradientBoostedTrees:
         self.min_samples_leaf = min_samples_leaf
         self.trees = []
         self.initial_prediction = 0.0
-        self.device = device or torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
+        self.device = self._setup_device(device)
+
+    def _setup_device(self, device):
+        """setup and validate device selection"""
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        if isinstance(device, str):
+            if device == "auto":
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            device = torch.device(device)
+
+        if device.type == "cuda" and not torch.cuda.is_available():
+            device = torch.device("cpu")
+
+        return device
+
+    def to(self, device):
+        """move model to specified device"""
+        self.device = self._setup_device(device)
+        return self
+
+    def cuda(self):
+        """move model to cuda device"""
+        return self.to("cuda")
+
+    def cpu(self):
+        """move model to cpu device"""
+        return self.to("cpu")
+
+    def _move_to_device(self, tensor):
+        """move tensor to the correct device"""
+        if isinstance(tensor, torch.Tensor):
+            return tensor.to(self.device)
+        elif isinstance(tensor, np.ndarray):
+            return torch.tensor(tensor, dtype=torch.float32, device=self.device)
+        else:
+            return torch.tensor(tensor, dtype=torch.float32, device=self.device)
 
     def fit(self, X, y):
-        """fit the gradient boosted tree to the data"""
-        # convert to tensors
-        if not isinstance(X, torch.Tensor):
-            X = torch.tensor(X, dtype=torch.float32, device=self.device)
-        if not isinstance(y, torch.Tensor):
-            y = torch.tensor(y, dtype=torch.float32, device=self.device)
+        """fit data to tree"""
+        X = self._move_to_device(X)
+        y = self._move_to_device(y)
 
-        # initialize with mean of target values
         self.initial_prediction = torch.mean(y).item()
         predictions = torch.full((len(y),), self.initial_prediction, device=self.device)
 
-        self.trees = []
-
         for i in range(self.n_estimators):
-            # calculate residuals, negative gradients for mse loss
+            # calculate residuals
             residuals = y - predictions
 
             # fit tree to residuals
@@ -201,22 +230,24 @@ class GradientBoostedTrees:
                 min_samples_leaf=self.min_samples_leaf,
             )
             tree.fit(X, residuals)
+            self.trees.append(tree)
 
             # update predictions
-            tree_predictions = torch.tensor(tree.predict(X), device=self.device)
-            predictions += self.learning_rate * tree_predictions
-
-            self.trees.append(tree)
+            tree_preds = torch.tensor(
+                tree.predict(X), device=self.device, dtype=torch.float32
+            )
+            predictions += self.learning_rate * tree_preds
 
     def predict(self, X):
         """predict values for input samples"""
-        if not isinstance(X, torch.Tensor):
-            X = torch.tensor(X, dtype=torch.float32, device=self.device)
+        X = self._move_to_device(X)
 
         predictions = torch.full((len(X),), self.initial_prediction, device=self.device)
 
         for tree in self.trees:
-            tree_predictions = torch.tensor(tree.predict(X), device=self.device)
+            tree_predictions = torch.tensor(
+                tree.predict(X), device=self.device, dtype=torch.float32
+            )
             predictions += self.learning_rate * tree_predictions
 
         return predictions
@@ -224,7 +255,6 @@ class GradientBoostedTrees:
     def predict_proba(self, X):
         """predict probabilities using sigmoid activation"""
         raw_predictions = self.predict(X)
-        # apply sigmoid to convert to probabilities
         return torch.sigmoid(raw_predictions)
 
 
@@ -239,6 +269,7 @@ class GradientBoostedClassifier:
         min_samples_split=2,
         min_samples_leaf=1,
         device=None,
+        verbose=True,
     ):
         self.gb_trees = GradientBoostedTrees(
             n_estimators=n_estimators,
@@ -247,52 +278,88 @@ class GradientBoostedClassifier:
             min_samples_split=min_samples_split,
             min_samples_leaf=min_samples_leaf,
             device=device,
+            verbose=verbose,
         )
-        self.feature_importance = None
+        self.device = self.gb_trees.device
+        self.learning_rate = learning_rate
+
+    def to(self, device):
+        """move model to specified device"""
+        self.gb_trees.to(device)
+        self.device = self.gb_trees.device
+        return self
+
+    def cuda(self):
+        """move model to cuda device"""
+        return self.to("cuda")
+
+    def cpu(self):
+        """Move model to cpu device"""
+        return self.to("cpu")
 
     def fit(self, X, y):
-        """fit the classifier"""
-        # convert to tensors if needed
-        if not isinstance(X, torch.Tensor):
-            X = torch.tensor(X, dtype=torch.float32)
+        """fit data to tree with classifier"""
+        # convert binary labels to logits for training
         if not isinstance(y, torch.Tensor):
-            y = torch.tensor(y, dtype=torch.float32)
+            y = torch.tensor(y, dtype=torch.float32, device=self.device)
+        else:
+            y = y.to(self.device)
+
+        y_logits = torch.where(
+            y == 1,
+            torch.tensor(1.0, device=self.device),
+            torch.tensor(-1.0, device=self.device),
+        )
+
+        return self.gb_trees.fit(X, y_logits)
+
+    def train_gbt(self, X, y, epochs=10):
+        """
+        training classifier
+
+        args:
+            X: training features
+            y: training targets
+            epochs: number of training epochs
+        """
+        # convert to tensors and move to device
+        if not isinstance(X, torch.Tensor):
+            X = torch.tensor(X, dtype=torch.float32, device=self.device)
+        else:
+            X = X.to(self.device)
+
+        if not isinstance(y, torch.Tensor):
+            y = torch.tensor(y, dtype=torch.float32, device=self.device)
+        else:
+            y = y.to(self.device)
 
         # convert binary labels to logits for training
-        # y should be 0/1, convert to logits
-        y_logits = torch.where(y == 1, torch.tensor(1.0), torch.tensor(-1.0))
+        y_logits = torch.where(
+            y == 1,
+            torch.tensor(1.0, device=self.device),
+            torch.tensor(-1.0, device=self.device),
+        )
 
-        self.gb_trees.fit(X, y_logits)
-        self._calculate_feature_importance(X)
+        # train over epochs
+        for epoch in range(epochs):
+            # reset trees for this epoch
+            self.gb_trees.trees = []
 
-    def _calculate_feature_importance(self, X):
-        """calculate feature importance using pytorch"""
-        n_features = X.shape[1]
-        importance_scores = []
+            # train the trees
+            self.gb_trees.fit(X, y_logits)
 
-        for feature_idx in range(n_features):
-            # count how often each feature is used for splitting
-            feature_count = 0
-            for tree in self.gb_trees.trees:
-                feature_count += self._count_feature_usage(tree.root, feature_idx)
-            importance_scores.append(feature_count)
+            # calculate loss and accuracy for this epoch
+            predictions = self.gb_trees.predict(X)
+            loss = torch.nn.functional.mse_loss(predictions, y_logits).item()
 
-        # normalize and convert to pytorch tensor
-        importance_tensor = torch.tensor(importance_scores, dtype=torch.float32)
-        if torch.sum(importance_tensor) > 0:
-            importance_tensor = importance_tensor / torch.sum(importance_tensor)
+            # calculate accuracy (assuming binary classification)
+            probs = torch.sigmoid(predictions)
+            preds = (probs > 0.5).float()
+            accuracy = (preds == y).float().mean().item()
 
-        self.feature_importance = importance_tensor
-
-    def _count_feature_usage(self, node, feature_idx):
-        """recursively count usage times of a feature in the tree"""
-        if node.is_leaf():
-            return 0
-
-        count = 1 if node.feature_idx == feature_idx else 0
-        count += self._count_feature_usage(node.left, feature_idx)
-        count += self._count_feature_usage(node.right, feature_idx)
-        return count
+            print(
+                f"epoch {epoch+1}/{epochs}, loss: {loss:.4f}, accuracy: {accuracy:.4f}"
+            )
 
     def predict_proba(self, X):
         """predict probabilities for input samples"""
@@ -303,19 +370,10 @@ class GradientBoostedClassifier:
         probabilities = self.predict_proba(X)
         return (probabilities > 0.5).int()
 
-    def get_feature_importance(self):
-        """get feature importance as a pytorch tensor"""
-        return self.feature_importance
-
     def save(self, path):
         """save the model to disk"""
         model_data = {
             "gb_trees": self.gb_trees,
-            "feature_importance": (
-                self.feature_importance.detach().cpu().numpy()
-                if self.feature_importance is not None
-                else None
-            ),
         }
         with open(path, "wb") as f:
             pickle.dump(model_data, f)
@@ -324,7 +382,4 @@ class GradientBoostedClassifier:
         """load the model from disk"""
         with open(path, "rb") as f:
             model_data = pickle.load(f)
-
         self.gb_trees = model_data["gb_trees"]
-        if model_data["feature_importance"] is not None:
-            self.feature_importance = torch.tensor(model_data["feature_importance"])
