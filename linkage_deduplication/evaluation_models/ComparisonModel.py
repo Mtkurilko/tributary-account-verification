@@ -6,7 +6,7 @@ gradient-boosted and transformer-based similarity scorers using tinygrad.
 '''
 
 import numpy as np
-from tinygrad import Tensor
+from tinygrad.tensor import Tensor
 from tinygrad.nn.optim import SGD
 
 class ComparisonModel:
