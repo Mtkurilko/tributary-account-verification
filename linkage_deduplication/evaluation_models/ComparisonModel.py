@@ -120,7 +120,7 @@ class ComparisonModel:
 
     def train_transformer(self, subject_pairs, labels, epochs=10, lr=1e-3):
         params = [
-            self.embeddings, self.attn_wq, self.attn_wk, self.attn_wv, self.ffn_w1, self.ffn_w2
+            self.attn_wq, self.attn_wk, self.attn_wv, self.ffn_w1, self.ffn_w2
         ]
         opt = SGD(params, lr=lr)
         eps = 1e-7
