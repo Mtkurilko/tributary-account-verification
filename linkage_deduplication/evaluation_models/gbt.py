@@ -1,9 +1,10 @@
 """
-gradient boosted tree implementation for tinygrad
+gradient boosted tree implementation for pytorch
 """
 
+import torch
+import torch.nn as nn
 import numpy as np
-from tinygrad.tensor import Tensor
 from typing import List, Tuple, Optional
 import pickle
 
@@ -25,7 +26,7 @@ class TreeNode:
 
 
 class DecisionTree:
-    """decision tree for gradient boosting (boilerplate)"""
+    """decision tree for gradient boosting"""
 
     def __init__(self, max_depth=3, min_samples_split=2, min_samples_leaf=1):
         self.max_depth = max_depth
@@ -35,6 +36,10 @@ class DecisionTree:
 
     def fit(self, X, y):
         """fit the decision tree to the data"""
+        if isinstance(X, torch.Tensor):
+            X = X.detach().cpu().numpy()
+        if isinstance(y, torch.Tensor):
+            y = y.detach().cpu().numpy()
         self.root = self._build_tree(X, y, depth=0)
 
     def _build_tree(self, X, y, depth):
@@ -101,7 +106,7 @@ class DecisionTree:
                 left_mask = feature_values <= threshold
                 right_mask = ~left_mask
 
-                if np.sum(left_mask) == 0 or np.sum(right_mask == 0):
+                if np.sum(left_mask) == 0 or np.sum(right_mask) == 0:
                     continue
 
                 # calculate weighted mse after split
@@ -130,6 +135,8 @@ class DecisionTree:
 
     def predict(self, X):
         """predict values for input samples"""
+        if isinstance(X, torch.Tensor):
+            X = X.detach().cpu().numpy()
         predictions = []
         for x in X:
             predictions.append(self._predict_single(x, self.root))
@@ -156,6 +163,7 @@ class GradientBoostedTrees:
         max_depth=3,
         min_samples_split=2,
         min_samples_leaf=1,
+        device=None,
     ):
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
@@ -164,15 +172,21 @@ class GradientBoostedTrees:
         self.min_samples_leaf = min_samples_leaf
         self.trees = []
         self.initial_prediction = 0.0
+        self.device = device or torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
 
     def fit(self, X, y):
         """fit the gradient boosted tree to the data"""
-        X = np.array(X)
-        y = np.array(y)
+        # convert to tensors
+        if not isinstance(X, torch.Tensor):
+            X = torch.tensor(X, dtype=torch.float32, device=self.device)
+        if not isinstance(y, torch.Tensor):
+            y = torch.tensor(y, dtype=torch.float32, device=self.device)
 
         # initialize with mean of target values
-        self.initial_prediction = np.mean(y)
-        predictions = np.full(len(y), self.initial_prediction)
+        self.initial_prediction = torch.mean(y).item()
+        predictions = torch.full((len(y),), self.initial_prediction, device=self.device)
 
         self.trees = []
 
@@ -189,18 +203,20 @@ class GradientBoostedTrees:
             tree.fit(X, residuals)
 
             # update predictions
-            tree_predictions = tree.predict(X)
+            tree_predictions = torch.tensor(tree.predict(X), device=self.device)
             predictions += self.learning_rate * tree_predictions
 
             self.trees.append(tree)
 
     def predict(self, X):
         """predict values for input samples"""
-        X = np.array(X)
-        predictions = np.full(len(X), self.initial_prediction)
+        if not isinstance(X, torch.Tensor):
+            X = torch.tensor(X, dtype=torch.float32, device=self.device)
+
+        predictions = torch.full((len(X),), self.initial_prediction, device=self.device)
 
         for tree in self.trees:
-            tree_predictions = tree.predict(X)
+            tree_predictions = torch.tensor(tree.predict(X), device=self.device)
             predictions += self.learning_rate * tree_predictions
 
         return predictions
@@ -208,9 +224,8 @@ class GradientBoostedTrees:
     def predict_proba(self, X):
         """predict probabilities using sigmoid activation"""
         raw_predictions = self.predict(X)
-
-        # apply sigmoid to convert
-        return 1 / (1 + np.exp(-raw_predictions))
+        # apply sigmoid to convert to probabilities
+        return torch.sigmoid(raw_predictions)
 
 
 class GradientBoostedClassifier:
@@ -223,6 +238,7 @@ class GradientBoostedClassifier:
         max_depth=3,
         min_samples_split=2,
         min_samples_leaf=1,
+        device=None,
     ):
         self.gb_trees = GradientBoostedTrees(
             n_estimators=n_estimators,
@@ -230,25 +246,27 @@ class GradientBoostedClassifier:
             max_depth=max_depth,
             min_samples_split=min_samples_split,
             min_samples_leaf=min_samples_leaf,
+            device=device,
         )
-
         self.feature_importance = None
 
     def fit(self, X, y):
         """fit the classifier"""
-        X = np.array(X)
-        y = np.array(y)
+        # convert to tensors if needed
+        if not isinstance(X, torch.Tensor):
+            X = torch.tensor(X, dtype=torch.float32)
+        if not isinstance(y, torch.Tensor):
+            y = torch.tensor(y, dtype=torch.float32)
 
         # convert binary labels to logits for training
         # y should be 0/1, convert to logits
-        y_logits = np.where(y == 1, 1.0, -1.0)
+        y_logits = torch.where(y == 1, torch.tensor(1.0), torch.tensor(-1.0))
 
         self.gb_trees.fit(X, y_logits)
-
         self._calculate_feature_importance(X)
 
     def _calculate_feature_importance(self, X):
-        """calculate feature importance using tinygrad"""
+        """calculate feature importance using pytorch"""
         n_features = X.shape[1]
         importance_scores = []
 
@@ -259,12 +277,12 @@ class GradientBoostedClassifier:
                 feature_count += self._count_feature_usage(tree.root, feature_idx)
             importance_scores.append(feature_count)
 
-        # normalize and score as tinygrad tensor
-        importance_array = np.array(importance_scores, dtype=np.float32)
-        if np.sum(importance_array) > 0:
-            importance_array = importance_array / np.sum(importance_array)
+        # normalize and convert to pytorch tensor
+        importance_tensor = torch.tensor(importance_scores, dtype=torch.float32)
+        if torch.sum(importance_tensor) > 0:
+            importance_tensor = importance_tensor / torch.sum(importance_tensor)
 
-        self.feature_importance = Tensor(importance_array)
+        self.feature_importance = importance_tensor
 
     def _count_feature_usage(self, node, feature_idx):
         """recursively count usage times of a feature in the tree"""
@@ -283,18 +301,18 @@ class GradientBoostedClassifier:
     def predict(self, X):
         """predict binary labels for input samples"""
         probabilities = self.predict_proba(X)
-        return (probabilities > 0.5).astype(int)
+        return (probabilities > 0.5).int()
 
     def get_feature_importance(self):
-        """get feature importance as a tinygrad tensor"""
+        """get feature importance as a pytorch tensor"""
         return self.feature_importance
 
     def save(self, path):
-        """save the model to the disk"""
+        """save the model to disk"""
         model_data = {
             "gb_trees": self.gb_trees,
             "feature_importance": (
-                self.feature_importance.numpy()
+                self.feature_importance.detach().cpu().numpy()
                 if self.feature_importance is not None
                 else None
             ),
@@ -309,4 +327,4 @@ class GradientBoostedClassifier:
 
         self.gb_trees = model_data["gb_trees"]
         if model_data["feature_importance"] is not None:
-            self.feature_importance = Tensor(model_data["feature_importance"])
+            self.feature_importance = torch.tensor(model_data["feature_importance"])
