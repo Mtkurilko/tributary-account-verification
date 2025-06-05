@@ -23,12 +23,6 @@ class TransformerModel(nn.Module):
         self.ffn_w2 = nn.Linear(self.embedding_dim, self.embedding_dim)
         self.gb_weights = nn.Parameter(torch.ones(7))
 
-    def gradient_boosted_score(self, subject1, subject2):
-        features = ['first_name', 'middle_name', 'last_name', 'dob', 'dod', 'email', 'birth_city']
-        x = torch.tensor([1.0 if getattr(subject1, f, "") == getattr(subject2, f, "") else -1.0 for f in features], device=self.gb_weights.device)
-        score = (self.gb_weights * x).sum()
-        return torch.sigmoid(score).item()
-
     def _byte_encode(self, s, max_len=32):
         arr = list(s.encode("utf-8")[:max_len])
         arr = arr + [0] * (max_len - len(arr))
