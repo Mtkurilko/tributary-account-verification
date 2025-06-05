@@ -15,6 +15,7 @@ from linkage_deduplication.evaluation_models.fellegi_sunter import fellegi_sunte
 from linkage_deduplication.evaluation_models.transformer_model import TransformerModel
 from linkage_deduplication.Subject import Subject
 from linkage_deduplication import ingest
+from linkage_deduplication.evaluation_models.gradient_model import GradientModel
 
 def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, doTrainModel=None, doSaveModel=None, savePath=None):
     '''
@@ -70,7 +71,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
     results = []
     
     # Set CONSTANTS for the TransformerModel`
-    EPOCHS_CONSTANT = 20  # Number of epochs for training the TransformerModel
+    EPOCHS_CONSTANT = 15  # Number of epochs for training the TransformerModel
     RUN_ON = "cpu"  # Device to run the model on, change to "cuda" if you have a GPU available
 
     # Ask the user if they want to use the TransformerModel
@@ -80,6 +81,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
     if model_requested == 1:
         # Initialize TransformerModel
         model = TransformerModel()
+        gradient_model = GradientModel()  # Initialize GradientModel for gradient-boosted scoring
 
         # Prompt for training data or loading a model
         load_model = ('y' if doLoadModel == True else 'n') if doLoadModel is not None else input("Do you want to load a pre-trained model? (Y/N): ").strip().lower()
@@ -108,7 +110,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
         # Run through each pair of subjects in the dataset
         for i, (subject1, subject2) in enumerate(subject_pairs):
             # Calculate the gradient-boosted score
-            gb_score = math.floor(model.gradient_boosted_score(subject1, subject2)*10000) / 10000.0  # Round to 4 decimal places
+            gb_score = math.floor(gradient_model.gradient_boosted_score(subject1, subject2)*10000) / 10000.0  # Round to 4 decimal places
             
             # Calculate the transformer similarity score
             transformer_score = math.floor(model.transformer_similarity(subject1, subject2)*10000) / 10000.0  # Round to 4 decimal places
@@ -159,6 +161,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
     elif model_requested == 3:
         # Initialize the TransformerModel
         model = TransformerModel()
+        gradient_model = GradientModel()  # Initialize GradientModel for gradient-boosted scoring
 
         # Prompt for training data or loading a model
         load_model = ('y' if doLoadModel == True else 'n') if doLoadModel is not None else input("Do you want to load a pre-trained model? (Y/N): ").strip().lower()
@@ -187,7 +190,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
         # Run through each pair of subjects in the dataset
         for i, (subject1, subject2) in enumerate(subject_pairs):
             # Calculate the gradient-boosted score
-            gb_score = math.floor(model.gradient_boosted_score(subject1, subject2) * 10000) / 10000.0  # Round to 4 decimal places
+            gb_score = math.floor(gradient_model.gradient_boosted_score(subject1, subject2) * 10000) / 10000.0  # Round to 4 decimal places
 
             # Calculate the transformer similarity score
             transformer_score = math.floor(model.transformer_similarity(subject1, subject2)*10000) / 10000.0  # Round to 4 decimal places
