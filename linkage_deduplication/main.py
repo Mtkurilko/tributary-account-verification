@@ -12,7 +12,7 @@ import math
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from linkage_deduplication.evaluation_models.fellegi_sunter import fellegi_sunter_probability as fs_prob
-from linkage_deduplication.evaluation_models.ComparisonModel import ComparisonModel
+from linkage_deduplication.evaluation_models.transformer_model import TransformerModel
 from linkage_deduplication.Subject import Subject
 from linkage_deduplication import ingest
 
@@ -68,14 +68,18 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
     
     # Initialize results list to store output
     results = []
+    
+    # Set CONSTANTS for the TransformerModel`
+    EPOCHS_CONSTANT = 20  # Number of epochs for training the TransformerModel
+    RUN_ON = "cpu"  # Device to run the model on, change to "cuda" if you have a GPU available
 
-    # Ask the user if they want to use the ComparisonModel
-    model_requested = modelRequested if modelRequested is not None else int(input("Do you want to use 1) ComparisonModel, 2) Fellegi-Sunter model, or 3) Both? (Enter 1, 2, or 3): "))
+    # Ask the user if they want to use the TransformerModel
+    model_requested = modelRequested if modelRequested is not None else int(input("Do you want to use 1) TransformerModel, 2) Fellegi-Sunter model, or 3) Both? (Enter 1, 2, or 3): "))
 
     # Run the requested model
     if model_requested == 1:
-        # Initialize the ComparisonModel
-        model = ComparisonModel()
+        # Initialize TransformerModel
+        model = TransformerModel()
 
         # Prompt for training data or loading a model
         load_model = ('y' if doLoadModel == True else 'n') if doLoadModel is not None else input("Do you want to load a pre-trained model? (Y/N): ").strip().lower()
@@ -89,7 +93,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
             # Subject pair arew tuples of (subject1, subject2) and already created
 
             #Train the model with the subject pairs and labels
-            model.train_transformer(subject_pairs, labels, epochs=2, lr=1e-6)
+            model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, lr=1e-6, device=RUN_ON) # Change device to "cuda" if you have a GPU available
 
             # Save the trained model (WHEN READY)
             save_model = ('y' if doSaveModel == True else 'n') if doSaveModel is not None else input("Do you want to save the trained model? (Y/N): ").strip().lower()
@@ -99,7 +103,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
                 print(f"Model saved to {path}")
 
         # Print loading message
-        print("Running ComparisonModel (Gradient-Boosted & Transformer)...")
+        print("Running TransformerModel (Gradient-Boosted & Transformer)...")
 
         # Run through each pair of subjects in the dataset
         for i, (subject1, subject2) in enumerate(subject_pairs):
@@ -153,8 +157,8 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
         to_csv(results)  # Save results to CSV
 
     elif model_requested == 3:
-        # Initialize the ComparisonModel
-        model = ComparisonModel()
+        # Initialize the TransformerModel
+        model = TransformerModel()
 
         # Prompt for training data or loading a model
         load_model = ('y' if doLoadModel == True else 'n') if doLoadModel is not None else input("Do you want to load a pre-trained model? (Y/N): ").strip().lower()
@@ -168,7 +172,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
             # Subject pair arew tuples of (subject1, subject2) and already created
 
             #Train the model with the subject pairs and labels
-            model.train_transformer(subject_pairs, labels, epochs=2, lr=1e-6)
+            model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, lr=1e-6, device=RUN_ON)  # Change device to "cuda" if you have a GPU available
 
             # Save the trained model (WHEN READY)
             save_model = ('y' if doSaveModel == True else 'n') if doSaveModel is not None else input("Do you want to save the trained model? (Y/N): ").strip().lower()
