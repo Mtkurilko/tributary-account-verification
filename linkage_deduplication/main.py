@@ -71,7 +71,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
     results = []
     
     # Set CONSTANTS for the TransformerModel & GradientModel
-    EPOCHS_CONSTANT = 100  # Number of epochs for training the TransformerModel
+    EPOCHS_CONSTANT = 10  # Number of epochs for training the TransformerModel
     LEARNING_RATE_CONSTANT = 1e-6  # Learning rate for training the TransformerModel
     RUN_ON = "cpu"  # Device to run the model on, change to "cuda" if you have a GPU available
 
@@ -105,10 +105,12 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
         # Print loading message
         print("Running Gradient-Boosted Model...")
 
+        gb_scores = model.batch_gradient_boosted_score(subject_pairs)  # Calculate gradient-boosted scores for all subject pairs
+
         # Run through each pair of subjects in the dataset
         for i, (subject1, subject2) in enumerate(subject_pairs):
             # Calculate the gradient-boosted score
-            gb_score = math.floor(model.gradient_boosted_score(subject1, subject2)*10000) / 10000.0  # Round to 4 decimal places
+            gb_score = math.floor((gb_scores[i])*10000) / 10000.0  # Round to 4 decimal places
             
             is_match = labels[i] == 1
             base_id = subject2.attributes.get('base_id') if is_match else ""
@@ -244,10 +246,12 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
         # Print loading message
         print("Running all models...")
 
+        gb_scores = gradient_model.batch_gradient_boosted_score(subject_pairs)  # Calculate gradient-boosted scores for all subject pairs
+
         # Run through each pair of subjects in the dataset
         for i, (subject1, subject2) in enumerate(subject_pairs):
             # Calculate the gradient-boosted score
-            gb_score = math.floor(gradient_model.gradient_boosted_score(subject1, subject2) * 10000) / 10000.0  # Round to 4 decimal places
+            gb_score = math.floor(gb_scores[i] * 10000) / 10000.0  # Round to 4 decimal places
 
             # Calculate the transformer similarity score
             transformer_score = math.floor(transformer_model.transformer_similarity(subject1, subject2)*10000) / 10000.0  # Round to 4 decimal places

@@ -7,6 +7,10 @@ import torch.nn as nn
 import numpy as np
 import pickle
 
+PROB_BARRIER = 0.5  # threshold for binary classification
+N_ESTIMATORS = 500  # default number of trees in the ensemble
+LEARNING_RATE = 0.1  # default learning rate for boosting
+MAX_DEPTH = 5  # default maximum depth of each tree
 
 class TreeNode:
     """a node in a decision tree"""
@@ -157,9 +161,9 @@ class GradientBoostedTrees:
 
     def __init__(
         self,
-        n_estimators=100,
-        learning_rate=0.1,
-        max_depth=3,
+        n_estimators=N_ESTIMATORS,
+        learning_rate=LEARNING_RATE,
+        max_depth=MAX_DEPTH,
         min_samples_split=2,
         min_samples_leaf=1,
         device=None,
@@ -255,7 +259,8 @@ class GradientBoostedTrees:
     def predict_proba(self, X):
         """predict probabilities using sigmoid activation"""
         raw_predictions = self.predict(X)
-        return torch.sigmoid(raw_predictions)
+        temperature = 4.0  # temperature for scaling logits
+        return torch.sigmoid(temperature * raw_predictions)
 
 
 class GradientBoostedClassifier:
@@ -263,9 +268,9 @@ class GradientBoostedClassifier:
 
     def __init__(
         self,
-        n_estimators=100,
-        learning_rate=0.1,
-        max_depth=3,
+        n_estimators=N_ESTIMATORS,
+        learning_rate=LEARNING_RATE,
+        max_depth=MAX_DEPTH,
         min_samples_split=2,
         min_samples_leaf=1,
         device=None,
@@ -363,8 +368,9 @@ class GradientBoostedClassifier:
 
             # Calculate loss and accuracy after this epoch
             loss = torch.nn.functional.mse_loss(predictions, y_logits).item()
-            probs = torch.sigmoid(predictions)
-            preds = (probs > 0.5).float()
+            temperature = 4.0  # temperature for scaling logits
+            probs = torch.sigmoid(temperature*predictions)
+            preds = (probs > PROB_BARRIER).float()
             accuracy = (preds == y).float().mean().item()
             print(f"Epoch {epoch+1}/{epochs}, Trees: {total_trees}, Loss: {loss:.4f}, Accuracy: {accuracy:.4f}")
 
@@ -378,7 +384,7 @@ class GradientBoostedClassifier:
     def predict(self, X):
         """predict binary labels for input samples"""
         probabilities = self.predict_proba(X)
-        return (probabilities > 0.5).int()
+        return (probabilities > PROB_BARRIER).int()
 
     def save(self, path):
         """save the model to disk"""

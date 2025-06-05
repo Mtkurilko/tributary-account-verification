@@ -79,6 +79,18 @@ class GradientModel:
             features.append(1.0 if attr1 == attr2 else 0.0)
         return np.array(features)
 
+
+    def batch_gradient_boosted_score(self, subject_pairs):
+        """
+        Efficient batch scoring for a list of subject pairs.
+        Returns a numpy array of probabilities.
+        """
+        features = [self._extract_features(s1, s2) for s1, s2 in subject_pairs]
+        features = np.array(features)
+        features_tensor = torch.tensor(features, dtype=torch.float32, device=self.device)
+        probabilities = self.classifier.predict_proba(features_tensor)
+        return probabilities.detach().cpu().numpy()
+
     def gradient_boosted_score(self, subject1, subject2):
         """
         calculate similarity score between two subjects
@@ -136,21 +148,13 @@ class GradientModel:
         return self
 
     def predict(self, subject_pairs):
-        """predict labels for subject pairs"""
-        scores = []
-        for subject1, subject2 in subject_pairs:
-            score = self.gradient_boosted_score(subject1, subject2)
-            scores.append(score)
-
-        return (np.array(scores) > 0.5).astype(int)
+        """predict labels for subject pairs (batch, fast)"""
+        probs = self.batch_gradient_boosted_score(subject_pairs)
+        return (probs > 0.5).astype(int)
 
     def predict_proba(self, subject_pairs):
-        """predict probabilities for subject pairs"""
-        scores = []
-        for subject1, subject2 in subject_pairs:
-            score = self.gradient_boosted_score(subject1, subject2)
-            scores.append(score)
-        return np.array(scores)
+        """predict probabilities for subject pairs (batch, fast)"""
+        return self.batch_gradient_boosted_score(subject_pairs)
 
     def save(self, path):
         """save the trained model"""
