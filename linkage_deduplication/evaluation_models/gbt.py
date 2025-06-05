@@ -313,16 +313,10 @@ class GradientBoostedClassifier:
 
         return self.gb_trees.fit(X, y_logits)
 
-    def train_gbt(self, X, y, epochs=10):
+    def train_gbt(self, X, y, epochs=1):
         """
-        training classifier
-
-        args:
-            X: training features
-            y: training targets
-            epochs: number of training epochs
+        Train the classifier over multiple epochs, adding trees each epoch.
         """
-        # convert to tensors and move to device
         if not isinstance(X, torch.Tensor):
             X = torch.tensor(X, dtype=torch.float32, device=self.device)
         else:
@@ -333,33 +327,49 @@ class GradientBoostedClassifier:
         else:
             y = y.to(self.device)
 
-        # convert binary labels to logits for training
         y_logits = torch.where(
             y == 1,
             torch.tensor(1.0, device=self.device),
             torch.tensor(-1.0, device=self.device),
         )
 
-        # train over epochs
+        # Save original number of trees per epoch
+        trees_per_epoch = max(1, self.gb_trees.n_estimators // epochs)
+        total_trees = 0
+        self.gb_trees.trees = []
+        self.gb_trees.initial_prediction = torch.mean(y_logits).item()
+        predictions = torch.full((len(y_logits),), self.gb_trees.initial_prediction, device=self.device)
+
         for epoch in range(epochs):
-            # reset trees for this epoch
-            self.gb_trees.trees = []
+            for i in range(trees_per_epoch):
+                # calculate residuals
+                residuals = y_logits - predictions
 
-            # train the trees
-            self.gb_trees.fit(X, y_logits)
+                # fit tree to residuals
+                tree = DecisionTree(
+                    max_depth=self.gb_trees.max_depth,
+                    min_samples_split=self.gb_trees.min_samples_split,
+                    min_samples_leaf=self.gb_trees.min_samples_leaf,
+                )
+                tree.fit(X, residuals)
+                self.gb_trees.trees.append(tree)
 
-            # calculate loss and accuracy for this epoch
-            predictions = self.gb_trees.predict(X)
+                # update predictions
+                tree_preds = torch.tensor(
+                    tree.predict(X), device=self.device, dtype=torch.float32
+                )
+                predictions += self.gb_trees.learning_rate * tree_preds
+                total_trees += 1
+
+            # Calculate loss and accuracy after this epoch
             loss = torch.nn.functional.mse_loss(predictions, y_logits).item()
-
-            # calculate accuracy (assuming binary classification)
             probs = torch.sigmoid(predictions)
             preds = (probs > 0.5).float()
             accuracy = (preds == y).float().mean().item()
+            print(f"Epoch {epoch+1}/{epochs}, Trees: {total_trees}, Loss: {loss:.4f}, Accuracy: {accuracy:.4f}")
 
-            print(
-                f"epoch {epoch+1}/{epochs}, loss: {loss:.4f}, accuracy: {accuracy:.4f}"
-            )
+        # Update n_estimators to reflect total trees
+        self.gb_trees.n_estimators = total_trees
 
     def predict_proba(self, X):
         """predict probabilities for input samples"""

@@ -71,7 +71,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
     results = []
     
     # Set CONSTANTS for the TransformerModel & GradientModel
-    EPOCHS_CONSTANT = 2  # Number of epochs for training the TransformerModel
+    EPOCHS_CONSTANT = 100  # Number of epochs for training the TransformerModel
     LEARNING_RATE_CONSTANT = 1e-6  # Learning rate for training the TransformerModel
     RUN_ON = "cpu"  # Device to run the model on, change to "cuda" if you have a GPU available
 
