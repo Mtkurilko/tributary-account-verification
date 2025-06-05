@@ -8,7 +8,6 @@ gradient-boosted and transformer-based similarity scorers using tinygrad.
 import numpy as np
 from tinygrad import Tensor
 from tinygrad.nn.optim import SGD
-from tinygrad.engine.jit import TinyJit
 
 class ComparisonModel:
     def __init__(self):
@@ -20,14 +19,14 @@ class ComparisonModel:
         self.vocab_size = 256  # Byte-level encoding
 
         # Embedding matrix (vocab_size x embedding_dim)
-        self.embeddings = Tensor.uniform(self.vocab_size, self.embedding_dim, low=-0.1, high=0.1)
+        self.embeddings = Tensor.uniform(self.vocab_size, self.embedding_dim, low=-0.1, high=0.1, requires_grad=True)
 
         # Simple transformer weights (single self-attention head for demonstration)
-        self.attn_wq = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1)
-        self.attn_wk = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1)
-        self.attn_wv = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1)
-        self.ffn_w1 = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1)
-        self.ffn_w2 = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1)
+        self.attn_wq = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1, requires_grad=True)
+        self.attn_wk = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1, requires_grad=True)
+        self.attn_wv = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1, requires_grad=True)
+        self.ffn_w1 = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1, requires_grad=True)
+        self.ffn_w2 = Tensor.uniform(self.embedding_dim, self.embedding_dim, low=-0.1, high=0.1, requires_grad=True)
 
     def gradient_boosted_score(self, subject1, subject2):
         features = ['first_name', 'middle_name', 'last_name', 'dob', 'dod', 'email', 'birth_city']
