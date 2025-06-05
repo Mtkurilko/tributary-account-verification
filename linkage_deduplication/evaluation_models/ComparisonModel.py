@@ -8,6 +8,7 @@ gradient-boosted and transformer-based similarity scorers using tinygrad.
 import numpy as np
 from tinygrad import Tensor
 from tinygrad.nn.optim import SGD
+from tinygrad.engine.jit import TinyJit
 
 class ComparisonModel:
     def __init__(self):
@@ -47,9 +48,13 @@ class ComparisonModel:
         return arr
 
     def _embed(self, arr):
-        # arr: numpy array of byte indices
         idx = Tensor(arr.astype(np.int32))
-        return self.embeddings[idx].reshape((-1, self.embedding_dim))
+        emb = self.embeddings[idx].reshape((-1, self.embedding_dim))
+        if np.isnan(emb.numpy()).any():
+            print("NaN in embedding!")
+        if np.all(emb.numpy() == 0):
+            print("All-zero embedding!")
+        return emb
 
     def _self_attention(self, x):
         # x: (seq_len, embedding_dim)
@@ -81,9 +86,21 @@ class ComparisonModel:
         vec2 = self._transformer_encode(arr2)
         # Cosine similarity
         dot = (vec1 * vec2).sum()
-        norm1 = (vec1 * vec1).sum().sqrt()
-        norm2 = (vec2 * vec2).sum().sqrt()
+        norm1 = (vec1 * vec1).sum().sqrt().clamp(1e-8, 1e8)
+        norm2 = (vec2 * vec2).sum().sqrt().clamp(1e-8, 1e8)
         similarity = dot / (norm1 * norm2 + 1e-8)
+        if np.isnan(vec1.numpy()).any():
+            print("NaN in vec1 after _transformer_encode!")
+        if np.isnan(vec2.numpy()).any():
+            print("NaN in vec2 after _transformer_encode!")
+        if np.isnan(dot.numpy()).any():
+            print("NaN in dot product!")
+        if np.isnan(norm1.numpy()).any():
+            print("NaN in norm1!")
+        if np.isnan(norm2.numpy()).any():
+            print("NaN in norm2!")
+        if np.isnan(similarity.numpy()).any():
+            print("NaN in similarity!")
         # Map cosine similarity [-1,1] to [0,1] and convert to float
         return float(((similarity + 1) / 2).item())
     
@@ -97,14 +114,12 @@ class ComparisonModel:
         vec1 = self._transformer_encode(arr1)
         vec2 = self._transformer_encode(arr2)
         dot = (vec1 * vec2).sum()
-        norm1 = (vec1 * vec1).sum().sqrt()
-        norm2 = (vec2 * vec2).sum().sqrt()
+        norm1 = (vec1 * vec1).sum().sqrt().clamp(1e-8, 1e8)
+        norm2 = (vec2 * vec2).sum().sqrt().clamp(1e-8, 1e8)
         similarity = dot / (norm1 * norm2 + 1e-8)
         return (similarity + 1) / 2  # Tensor in [0,1]
 
     def train_transformer(self, subject_pairs, labels, epochs=10, lr=1e-3):
-        # subject_pairs: list of (subject1, subject2)
-        # labels: list of 0/1
         params = [
             self.embeddings, self.attn_wq, self.attn_wk, self.attn_wv, self.ffn_w1, self.ffn_w2
         ]
@@ -116,15 +131,20 @@ class ComparisonModel:
                 for (subj1, subj2), label in zip(subject_pairs, labels):
                     pred = self.transformer_similarity_tensor(subj1, subj2)
                     pred = pred.clamp(eps, 1 - eps)  # Avoid log(0) issues
-                    target = Tensor([label], requires_grad=False)
+                    pred = pred.reshape(())  # Ensure scalar
+                    target = Tensor.full(pred.shape, float(label))  # Match shape
                     # Binary cross-entropy loss
                     loss = -(target * pred.log() + (1 - target) * (1 - pred).log()).mean()
                     opt.zero_grad()
                     loss.backward()
+                    # Diagnostic: check for missing gradients
+                    for i, p in enumerate(params):
+                        if p.grad is None:
+                            print(f"Parameter {i} ({p.shape}) has no grad!")
                     opt.step()
                     total_loss += float(loss.item())
-                    if np.isnan(float(loss.item())): # Check for NaN in loss
-                        print("NaN detected in loss, stopping training.")
+                    if np.isnan(float(loss.item())):
+                        print(f"NaN detected in loss! pred={pred.numpy()}, target={target.numpy()}")
                         break
                 print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss/len(subject_pairs):.4f}")
     
@@ -140,12 +160,22 @@ class ComparisonModel:
 
     def load(self, path):
         data = np.load(path)
-        self.embeddings = Tensor(data['embeddings'])
-        self.attn_wq = Tensor(data['attn_wq'])
-        self.attn_wk = Tensor(data['attn_wk'])
-        self.attn_wv = Tensor(data['attn_wv'])
-        self.ffn_w1 = Tensor(data['ffn_w1'])
-        self.ffn_w2 = Tensor(data['ffn_w2'])
+        self.embeddings = Tensor(data['embeddings'], requires_grad=True)
+        self.attn_wq = Tensor(data['attn_wq'], requires_grad=True)
+        self.attn_wk = Tensor(data['attn_wk'], requires_grad=True)
+        self.attn_wv = Tensor(data['attn_wv'], requires_grad=True)
+        self.ffn_w1 = Tensor(data['ffn_w1'], requires_grad=True)
+        self.ffn_w2 = Tensor(data['ffn_w2'], requires_grad=True)
+        for name, tensor in [
+            ("embeddings", self.embeddings),
+            ("attn_wq", self.attn_wq),
+            ("attn_wk", self.attn_wk),
+            ("attn_wv", self.attn_wv),
+            ("ffn_w1", self.ffn_w1),
+            ("ffn_w2", self.ffn_w2),
+        ]:
+            arr = tensor.numpy()
+            print(f"{name}: min={arr.min()}, max={arr.max()}, any NaN={np.isnan(arr).any()}")
 
 # Example usage:
 # model = ComparisonModel()

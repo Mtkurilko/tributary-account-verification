@@ -89,7 +89,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
             # Subject pair arew tuples of (subject1, subject2) and already created
 
             #Train the model with the subject pairs and labels
-            model.train_transformer(subject_pairs, labels, epochs=20, lr=1e-3)
+            model.train_transformer(subject_pairs, labels, epochs=2, lr=1e-6)
 
             # Save the trained model (WHEN READY)
             save_model = ('y' if doSaveModel == True else 'n') if doSaveModel is not None else input("Do you want to save the trained model? (Y/N): ").strip().lower()
@@ -168,7 +168,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel=None, loadPath=None, do
             # Subject pair arew tuples of (subject1, subject2) and already created
 
             #Train the model with the subject pairs and labels
-            model.train_transformer(subject_pairs, labels, epochs=2, lr=1e-5)
+            model.train_transformer(subject_pairs, labels, epochs=2, lr=1e-6)
 
             # Save the trained model (WHEN READY)
             save_model = ('y' if doSaveModel == True else 'n') if doSaveModel is not None else input("Do you want to save the trained model? (Y/N): ").strip().lower()
