@@ -8,9 +8,12 @@ import streamlit as st
 import pandas as pd
 import os
 import glob
-from linkage_deduplication.main import module_run
 import streamlit.components.v1 as components
 import time
+
+from dataset.generate import generate_from_args
+from linkage_deduplication.main import module_run
+
 
 MATCH_THRESHOLD = 0.9  # Probability above this is considered a match
 
@@ -68,12 +71,42 @@ model_options = {
 model_choice = st.sidebar.selectbox("Select model(s) to run:", list(model_options.keys()))
 model_requested = model_options[model_choice]
 
-uploaded_file = st.sidebar.file_uploader("Upload your dataset (.json)", type=["json"])
+# --- Dataset Source Selection ---
+st.sidebar.markdown("---")
+use_generator = st.sidebar.toggle("Generate Synthetic Dataset", value=False)
+
 dataset_path = None
-if uploaded_file is not None:
-    dataset_path = "uploaded_dataset.json"
-    with open(dataset_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+generated = False
+
+if use_generator:
+    st.sidebar.markdown("#### Synthetic Dataset Options")
+    gen_num_people = st.sidebar.number_input("Number of People", min_value=2, max_value=10000, value=100)
+    gen_num_edges = st.sidebar.number_input("Number of Edges", min_value=1, max_value=100000, value=200)
+    gen_duplicate_likelihood = st.sidebar.slider("Duplicate Likelihood", min_value=0.0, max_value=1.0, value=0.2, step=0.01)
+    gen_output_path = st.sidebar.text_input("Output Path", value="dataset/dataset.json")
+    gen_seq = st.sidebar.number_input("Sequence Count (optional)", min_value=0, max_value=1000, value=0)
+    gen_steps = st.sidebar.number_input("Sequence Steps (if sequence)", min_value=1, max_value=1000, value=10)
+    gen_btn = st.sidebar.button("Generate Dataset", key="generate_dataset_btn")
+    if gen_btn:
+        if gen_seq > 0:
+            generate_from_args(sequence=int(gen_seq), steps=int(gen_steps), output=gen_output_path)
+        else:
+            generate_from_args(num_people=int(gen_num_people), num_edges=int(gen_num_edges),
+                               output=gen_output_path, duplicate_likelihood=float(gen_duplicate_likelihood))
+        st.sidebar.success(f"Generated and will use dataset at {gen_output_path}.")
+        dataset_path = gen_output_path
+        generated = True
+    elif os.path.exists(gen_output_path):
+        dataset_path = gen_output_path
+        generated = True
+else:
+    uploaded_file = st.sidebar.file_uploader("Upload your dataset (.json)", type=["json"])
+    if uploaded_file is not None:
+        dataset_path = "uploaded_dataset.json"
+        with open(dataset_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+    elif os.path.exists("dataset/dataset.json"):
+        dataset_path = "dataset/dataset.json"
 
 # --- Training and Model Options ---
 st.sidebar.markdown("---")
@@ -310,10 +343,13 @@ if os.path.exists("graph.html"):
         overflow: hidden;
         border: 1px solid #ddd;
         box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        height: 105%;
+        margin-top: -0.15em;
+        margin-left: -0.2em;
     ">
         {graph_html}
     </div>
     """
-    components.html(styled_html, height=500, scrolling=True)
+    components.html(styled_html, height=500, scrolling=False)
 else:
     st.info("No graph visualization available. Please generate 'graph.html'.")

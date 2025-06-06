@@ -29,8 +29,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db.gdb import GraphDatabase
 
 from faker import Faker
-from data import *
 
+from dataset.data import *
 
 class Generator:
     """
@@ -796,6 +796,37 @@ def main() -> None:
         args.num_people, args.num_edges, args.output, args.duplicate_likelihood
     )
 
+# Michael: This function allows running this script outside the terminal
+# and is useful for programmatically generating datasets or 
+# sequences using an imported function.
+def generate_from_args(
+    num_people: int = None,
+    num_edges: int = None,
+    output: str = "dataset.json",
+    duplicate_likelihood: float = DEFAULT_DUPLICATE_LIKELIHOOD,
+    sequence: int = None,
+    steps: int = DEFAULT_SEQUENCE_STEPS,
+):
+    """
+    Generate a dataset or sequences, just like the CLI, but callable from Python.
+    """
+    if sequence is not None:
+        if sequence <= 0:
+            raise ValueError("sequence count must be positive")
+        output_file = output if output != "dataset.json" else "sequences.json"
+        sequences = generate_sequences(sequence, steps, output_file)
+        return sequences
+    else:
+        if num_people is None or num_edges is None:
+            raise ValueError("num_people and num_edges are required for regular dataset generation")
+        max_edges = num_people * (num_people - 1)
+        if num_edges > max_edges:
+            print(f"warn: num_edges ({num_edges}) is very high relative to num_people")
+            print(f"maximum possible edges: {max_edges}")
+        if not 0.0 <= duplicate_likelihood <= 1.0:
+            raise ValueError("duplicate-likelihood must be between 0.0 and 1.0")
+        generate_dataset(num_people, num_edges, output, duplicate_likelihood)
+        return output
 
 if __name__ == "__main__":
     main()
