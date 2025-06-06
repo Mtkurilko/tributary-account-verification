@@ -6,7 +6,7 @@ This class is used to store and manage the attributes of a subject, including th
 '''
 
 class Subject:
-    def __init__(self, first_name, last_name, dob, email, dod=None, middle_name=None, birth_city=None, attributes=None):
+    def __init__(self, first_name, last_name, dob, email, phone_number=None, dod=None, middle_name=None, birth_city=None, attributes=None):
         """
         Initialize a Subject instance.
 
@@ -16,6 +16,7 @@ class Subject:
         :param dob: The date of birth of the subject.
         :param dod: The date of death of the subject (optional).
         :param email: The email address of the subject.
+        :param phone_number: The phone number of the subject (optional).
         :param birth_city: The city of birth of the subject.
         :param attributes: A dictionary of additional attributes for the subject.
         """
@@ -25,6 +26,7 @@ class Subject:
         self.dob = dob
         self.dod = dod
         self.email = email
+        self.phone_number = phone_number
         self.birth_city = birth_city
         # Attributes can include any additional information relevant to the subject
         self.attributes = attributes if attributes is not None else {}
@@ -35,4 +37,4 @@ class Subject:
         """
         return (f"Subject(first_name={self.first_name}, middle_name={self.middle_name}, "
                 f"last_name={self.last_name}, dob={self.dob}, dod={self.dod}, email={self.email}, "
-                f"birth_city={self.birth_city}, attributes={self.attributes})")
+                f"phone_number={self.phone_number}, birth_city={self.birth_city}, attributes={self.attributes})")

@@ -30,6 +30,7 @@ class GradientModel:
             "dob",
             "dod",
             "email",
+            "phone_number",
             "birth_city",
         ]
         self.is_trained = False

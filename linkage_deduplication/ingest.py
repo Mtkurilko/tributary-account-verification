@@ -34,6 +34,7 @@ def ingest_data(file_path):
             dob=item.get('date_of_birth', None),
             dod=item.get('date_of_death', None),
             email=item.get('email'),
+            phone_number=item.get('phone_number', None),
             birth_city=item.get('birth_city', None),
             attributes={'base_id': item.get('base_uuid', None), 'uuid': uuid} # Additional attributes if any
         )

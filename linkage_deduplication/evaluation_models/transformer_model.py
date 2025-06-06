@@ -49,7 +49,7 @@ class TransformerModel(nn.Module):
         return x.mean(dim=0)
 
     def transformer_similarity(self, subject1, subject2):
-        features = ['first_name', 'middle_name', 'last_name', 'dob', 'dod', 'email', 'birth_city']
+        features = ['first_name', 'middle_name', 'last_name', 'dob', 'dod', 'email', 'phone_number', 'birth_city']
         s1 = " ".join([str(getattr(subject1, f, "")) for f in features])
         s2 = " ".join([str(getattr(subject2, f, "")) for f in features])
         arr1 = self._byte_encode(s1).to(self.embeddings.weight.device)
@@ -63,7 +63,7 @@ class TransformerModel(nn.Module):
         return float(((similarity + 1) / 2).item())
 
     def transformer_similarity_tensor(self, subject1, subject2):
-        features = ['first_name', 'middle_name', 'last_name', 'dob', 'dod', 'email', 'birth_city']
+        features = ['first_name', 'middle_name', 'last_name', 'dob', 'dod', 'email', 'phone_number', 'birth_city']
         s1 = " ".join([str(getattr(subject1, f, "")) for f in features])
         s2 = " ".join([str(getattr(subject2, f, "")) for f in features])
         arr1 = self._byte_encode(s1).to(self.embeddings.weight.device)
