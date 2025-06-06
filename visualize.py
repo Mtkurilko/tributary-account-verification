@@ -40,7 +40,7 @@ def get_node_color(connections: int, max_connections: int) -> str:
 def visualize_graph(
     db: GraphDatabase,
     title: str = "database visualization",
-    height: str = "750px",
+    height: str = "600px",
     width: str = "100%",
     physics: str = "barnes_hut",
 ) -> Network:
@@ -81,38 +81,73 @@ def visualize_graph(
     elif physics == "disabled":
         net.toggle_physics(False)
 
+    node_count = db.node_count()
+
+    # scale physics parameters based on graph size
+    if node_count <= 50:
+        gravitational_constant = -2000
+        spring_length = 150
+        spring_constant = 0.04
+    elif node_count <= 200:
+        gravitational_constant = -4000
+        spring_length = 200
+        spring_constant = 0.02
+    else:
+        gravitational_constant = -6000
+        spring_length = 250
+        spring_constant = 0.01
+
     net.set_options(
-        """
-    var options = {
-      "physics": {
+        f"""
+    var options = {{
+      "physics": {{
         "enabled": true,
-        "stabilization": {
+        "stabilization": {{
           "enabled": true,
-          "iterations": 150,
+          "iterations": {min(300, max(100, node_count * 2))},
           "updateInterval": 50
-        },
-        "barnesHut": {
-          "gravitationalConstant": -4000,
+        }},
+        "barnesHut": {{
+          "gravitationalConstant": {gravitational_constant},
           "centralGravity": 0.1,
-          "springLength": 200,
-          "springConstant": 0.02,
+          "springLength": {spring_length},
+          "springConstant": {spring_constant},
           "damping": 0.2,
           "avoidOverlap": 0.5
-        }
-      },
-      "edges": {
+        }}
+      }},
+      "edges": {{
         "smooth": false,
-        "width": 2
-      },
-      "nodes": {
-        "physics": true
-      }
-    }
+        "width": 2,
+        "arrows": {{
+          "to": {{
+            "enabled": true,
+            "scaleFactor": 0.8
+          }}
+        }}
+      }},
+      "nodes": {{
+        "physics": true,
+        "chosen": {{
+          "node": true,
+          "label": false
+        }}
+      }},
+      "interaction": {{
+        "hover": true,
+        "hoverConnectedEdges": true,
+        "selectConnectedEdges": false
+      }}
+    }}
     """
     )
 
     connection_counts = {node: len(list(G.neighbors(node))) for node in G.nodes()}
     max_connections = max(connection_counts.values()) if connection_counts else 0
+
+    # scalable node sizing
+    base_size = max(15, min(30, 100 / max(1, node_count / 20)))
+    max_size_bonus = max(20, min(50, 200 / max(1, node_count / 10)))
 
     for node_id in G.nodes():
         node = db.get_node(node_id)
@@ -131,7 +166,14 @@ def visualize_graph(
 
         color = get_node_color(connections, max_connections)
 
-        size = 20 + (connections / max_connections * 30) if max_connections > 0 else 20
+        size = (
+            base_size + (connections / max_connections * max_size_bonus)
+            if max_connections > 0
+            else base_size
+        )
+
+        # scale font size based on graph size
+        font_size = max(12, min(18, 50 / max(1, node_count / 30)))
 
         net.add_node(
             node_id,
@@ -139,13 +181,16 @@ def visualize_graph(
             title=title,
             color=color,
             size=size,
-            font={"size": 16, "color": "white", "face": "arial"},
+            font={"size": font_size, "color": "white", "face": "Arial"},
         )
 
     for (source, target), edge in db.edges.items():
         weight = edge.metadata.get("weight", 1.0)
 
         edge_title = f"{'directed' if edge.directed else 'undirected'} edge\nfrom: {source}\nto: {target}\nweight: {weight:.2f}"
+
+        # scale edge thickness based on graph size
+        edge_width = max(1, min(4, 10 / max(1, node_count / 50)))
 
         if edge.directed:
             net.add_edge(
@@ -155,6 +200,7 @@ def visualize_graph(
                 title=edge_title,
                 arrows="to",
                 color={"color": "#aaaaaa", "highlight": "#ffffff"},
+                width=edge_width,
                 smooth=False,
             )
         else:
@@ -164,6 +210,7 @@ def visualize_graph(
                 value=weight,
                 title=edge_title,
                 color={"color": "#888888", "highlight": "#ffffff"},
+                width=edge_width,
                 dashes=True,
                 smooth=False,
             )
@@ -211,7 +258,7 @@ def main():
     )
     parser.add_argument(
         "--height",
-        default="750px",
+        default="600px",
         help="height of the visualization",
     )
     parser.add_argument(
