@@ -19,7 +19,7 @@ from linkage_deduplication.evaluation_models.gradient_model import GradientModel
 
 def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "transformer": None}, 
         loadPath={"gradient": None, "transformer": None}, doTrainModel={"gradient": None, "transformer": None}, 
-        doSaveModel={"gradient": None, "transformer": None}, savePath={"gradient": None, "transformer": None}):
+        doSaveModel={"gradient": None, "transformer": None}, savePath={"gradient": None, "transformer": None}, trainParams={}):
     '''
     # Example subjects
     subject1 = Subject(
@@ -79,8 +79,8 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
     results = []
     
     # Set CONSTANTS for the TransformerModel & GradientModel
-    EPOCHS_CONSTANT = 10  # Number of epochs for training the TransformerModel
-    LEARNING_RATE_CONSTANT = 1e-6  # Learning rate for training the TransformerModel
+    EPOCHS_CONSTANT = trainParams.get("epochs", 10)  # Number of epochs for training the TransformerModel
+    LEARNING_RATE_CONSTANT = trainParams.get("lr", 1e-6)  # Learning rate for training the TransformerModel
     RUN_ON = "cpu"  # Device to run the model on, change to "cuda" if you have a GPU available
 
     # Ask the user if they want to use the TransformerModel
@@ -408,7 +408,8 @@ def to_csv(results, output_path="results.csv"):
 
 def module_run(modelRequested, jsonPath, doLoadModel={"gradient": False, "transformer": False}, 
                loadPath={"gradient": None, "transformer": None}, doTrainModel={"gradient": False, "transformer": False}, 
-               doSaveModel={"gradient": False, "transformer": False}, savePath={"gradient": None, "transformer": None}):
+               doSaveModel={"gradient": False, "transformer": False}, savePath={"gradient": None, "transformer": None},
+               trainParams={}):
     '''
     This function is called when the module is imported.
     It runs the main function to execute the linkage and deduplication process.
@@ -422,7 +423,8 @@ def module_run(modelRequested, jsonPath, doLoadModel={"gradient": False, "transf
     savePath: dict - Dictionary containing paths to save the trained Gradient and Transformer models.
     '''
     main(modelRequested=modelRequested, jsonPath=jsonPath, doLoadModel=doLoadModel, 
-         loadPath=loadPath, doTrainModel=doTrainModel, doSaveModel=doSaveModel, savePath=savePath)
+         loadPath=loadPath, doTrainModel=doTrainModel, doSaveModel=doSaveModel, 
+         savePath=savePath, trainParams=trainParams)
 
 
 if __name__ == "__main__":
