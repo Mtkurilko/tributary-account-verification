@@ -232,7 +232,8 @@ def save_visualization(
         with open(filename, "r") as f:
             html_content = f.read()
 
-        fix_viewport = f"""
+        # create search bar and centering functionality
+        search_functionality = f"""
         <style>
         body, html {{
             margin: 0 !important;
@@ -244,11 +245,117 @@ def save_visualization(
             margin: 0 auto;
             padding: 0 !important;
             box-sizing: border-box;
+            position: relative;
+        }}
+        #search-overlay {{
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #444;
+        }}
+        #search-input {{
+            background: #333;
+            color: white;
+            border: 1px solid #666;
+            padding: 8px;
+            border-radius: 3px;
+            width: 200px;
+            font-size: 14px;
+        }}
+        #search-button {{
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 3px;
+            margin-left: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }}
+        #search-button:hover {{
+            background: #005a9e;
+        }}
+        #search-status {{
+            color: #ccc;
+            font-size: 12px;
+            margin-top: 5px;
         }}
         </style>
+        
+        <script>
+        function centerOnNode(nodeId) {{
+            if (network && network.body && network.body.nodes[nodeId]) {{
+                const nodePosition = network.getPositions([nodeId])[nodeId];
+                
+                network.moveTo({{
+                    position: nodePosition,
+                    scale: 1.0,
+                    animation: {{
+                        duration: 1000,
+                        easingFunction: 'easeInOutQuad'
+                    }}
+                }});
+                
+                network.selectNodes([nodeId]);
+                setTimeout(() => {{
+                    network.unselectAll();
+                }}, 2000);
+                
+                return true;
+            }}
+            return false;
+        }}
+        
+        function searchNode() {{
+            const input = document.getElementById('search-input');
+            const status = document.getElementById('search-status');
+            const nodeId = input.value.trim();
+            
+            if (!nodeId) {{
+                status.textContent = 'please enter a node id';
+                status.style.color = '#ffb6b6';
+                return;
+            }}
+            
+            if (centerOnNode(nodeId)) {{
+                status.textContent = `found and centered on node: ${{nodeId}}`;
+                status.style.color = '#51cf66';
+            }} else {{
+                status.textContent = `node not found: ${{nodeId}}`;
+                status.style.color = '#ff6b6b';
+            }}
+        }}
+        
+        document.addEventListener('DOMContentLoaded', function() {{
+            const searchInput = document.getElementById('search-input');
+            if (searchInput) {{
+                searchInput.addEventListener('keypress', function(e) {{
+                    if (e.key === 'Enter') {{
+                        searchNode()
+                    }}
+                }});
+            }}
+        }});
+        </script>
         """
 
-        html_content = html_content.replace("</head>", fix_viewport + "</head>")
+        # inject search bar HTML into the body
+        search_bar_html = """
+        <div id="search-overlay">
+            <input type="text" id="search-input" placeholder="Enter node ID to center view">
+            <button id="search-button" onclick="searchNode()">Find</button>
+            <div id="search-status"></div>
+        </div>
+        """
+
+        html_content = html_content.replace("</head>", search_functionality + "</head>")
+        html_content = html_content.replace(
+            '<div class="card"', search_bar_html + '<div class="card"'
+        )
 
         with open(filename, "w") as f:
             f.write(html_content)
