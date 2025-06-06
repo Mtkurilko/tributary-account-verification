@@ -9,15 +9,55 @@ import pandas as pd
 import os
 import glob
 from linkage_deduplication.main import module_run
+import streamlit.components.v1 as components
+import time
 
 MATCH_THRESHOLD = 0.9  # Probability above this is considered a match
 
 st.set_page_config(layout="wide")
+
+st.markdown(
+    """
+    <style>
+    /* Hide anchor link icon next to headers and prevent centering jump */
+    .stMarkdown h1 a, .stMarkdown h2 a, .stMarkdown h3 a, .stMarkdown h4 a, .stMarkdown h5 a, .stMarkdown h6 a,
+    .stHeading a {
+        display: none !important;
+        pointer-events: none !important;
+    }
+    /* Prevent header jump/centering when anchor is clicked */
+    .stHeading {
+        scroll-margin-top: 0 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    """
+    <style>
+    /* Make the sidebar run button smaller */
+    div[data-testid="stSidebar"] button[kind="secondary"] {
+        font-size: 0.85em !important;
+        padding: 0.25em 0.75em !important;
+        min-height: 1.8em !important;
+        height: 2em !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 st.title("Linkage and Deduplication Evaluation Dashboard")
 st.write("This dashboard lets you run and evaluate the linkage/deduplication models interactively.")
 
 # --- Sidebar for Model Controls ---
-st.sidebar.header("Model Controls")
+header_col, button_col = st.sidebar.columns([3, 2])
+with header_col:
+    st.markdown("### Model Controls")
+with button_col:
+    run_models_clicked = st.button("Run Model(s)", key="sidebar_run")
 
 model_options = {
     "Gradient Model": 1,
@@ -130,11 +170,16 @@ else:
     train_params = {}
 
 # --- Main Area: Run Button ---
-if st.button("Run Model(s)"):
+if 'run_models_clicked' not in locals():
+    run_models_clicked = False
+
+if run_models_clicked:
     if dataset_path is None:
         st.error("Please upload a dataset first.")
     else:
-        st.info("Running models, please wait...")
+        status_placeholder = st.empty()
+        status_placeholder.info("Running models, please wait...")
+
         # Prepare doLoadModel and doSaveModel dicts
         doLoadModel = {"gradient": False, "transformer": False}
         doSaveModel = {"gradient": False, "transformer": False}
@@ -160,7 +205,9 @@ if st.button("Run Model(s)"):
             savePath=save_path,
             trainParams=train_params,
         )
-        st.success("Model(s) finished running! See results below.")
+        status_placeholder.success("Model(s) finished running! See results below.")
+        time.sleep(2)  # Show the success message for 2 seconds
+        status_placeholder.empty()  # Remove the message
 
 # --- Model Accuracy Display ---
 left_col, right_col = st.columns([4, 2])
@@ -236,7 +283,6 @@ results_path = "results.csv"
 if os.path.exists(results_path):
     df = pd.read_csv(results_path)
     st.dataframe(df, use_container_width=True)
-    st.download_button("Download Results as CSV", df.to_csv(index=False), file_name="results.csv")
 else:
     st.info("No results yet. Run a model to see results here.")
 
@@ -248,3 +294,26 @@ if do_save:
     if model_requested in [2, 4] and save_path["transformer"] and os.path.exists(save_path["transformer"]):
         with open(save_path["transformer"], "rb") as f:
             st.download_button("Download Transformer Model", f, file_name=save_path["transformer"])
+
+# --- Graph Visualization ---
+st.header("Dataset Graph")
+if os.path.exists("graph.html"):
+    with open("graph.html", "r") as f:
+        graph_html = f.read()
+    # Wrap the HTML in a styled div for rounded corners and padding
+    styled_html = f"""
+    <div style="
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        border-radius: 18px;
+        overflow: hidden;
+        border: 1px solid #ddd;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    ">
+        {graph_html}
+    </div>
+    """
+    components.html(styled_html, height=500, scrolling=True)
+else:
+    st.info("No graph visualization available. Please generate 'graph.html'.")
