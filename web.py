@@ -10,6 +10,8 @@ import os
 import glob
 from linkage_deduplication.main import module_run
 
+MATCH_THRESHOLD = 0.9  # Probability above this is considered a match
+
 st.set_page_config(layout="wide")
 st.title("Linkage and Deduplication Evaluation Dashboard")
 st.write("This dashboard lets you run and evaluate the linkage/deduplication models interactively.")
@@ -156,9 +158,76 @@ if st.button("Run Model(s)"):
             doTrainModel=doTrainModel,
             doSaveModel=doSaveModel,
             savePath=save_path,
-            train_params=train_params,
+            trainParams=train_params,
         )
         st.success("Model(s) finished running! See results below.")
+
+# --- Model Accuracy Display ---
+left_col, right_col = st.columns([4, 2])
+with left_col:
+    st.subheader("Model Accuracies")
+with right_col:
+    slider_col, toggle_col = st.columns([2, 2])
+    with slider_col:
+        MATCH_THRESHOLD = st.slider(
+            "Match Threshold",
+            min_value=0.8,
+            max_value=1.0,
+            value=0.9,
+            step=0.001,
+            format="%.3f",
+            help="Probability above this is considered a match"
+        )
+    with toggle_col:
+        exclude_nos = st.checkbox(
+            "Exclude 'No' matches",
+            value=True,  # Checked by default
+            help="Only consider 'Yes' matches in accuracy"
+        )
+
+MODEL_COLUMNS = {
+    "Gradient_Boosted_Score": "Gradient Model",
+    "Transformer_Similarity_Score": "Transformer Model",
+    "Felligi_Sunter_Similarity_Score": "Fellegi-Sunter Model"
+}
+MODEL_COLORS = {
+    "Gradient_Boosted_Score": "#4CAF50",
+    "Transformer_Similarity_Score": "#2196F3",
+    "Felligi_Sunter_Similarity_Score": "#FF9800"
+}
+
+if os.path.exists("results.csv"):
+    df = pd.read_csv("results.csv")
+    if "Match" in df.columns:
+        match_map = {"Yes": 1, "No": 0}
+        match_col = df["Match"].map(match_map)
+        if exclude_nos:
+            mask = match_col == 1
+            df = df[mask]
+            match_col = match_col[mask]
+        cols = st.columns(len(MODEL_COLUMNS))
+        for i, (col, label) in enumerate(MODEL_COLUMNS.items()):
+            if col in df.columns and df[col].notna().any():
+                preds = (df[col] > MATCH_THRESHOLD).astype(int)
+                correct = (preds == match_col)
+                acc = correct.sum() / len(df) if len(df) > 0 else 0
+                percent = f"{acc*100:.4f}%"
+                cols[i].markdown(
+                    f"<div style='background-color:{MODEL_COLORS[col]};padding:0.5em 0.5em 0.2em 0.5em;border-radius:8px;text-align:center;color:white;font-weight:bold;'>"
+                    f"{label}<br><span style='font-size:1.5em'>{percent}</span></div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                cols[i].markdown(
+                    f"<div style='background-color:#eee;padding:0.5em 0.5em 0.2em 0.5em;border-radius:8px;text-align:center;color:#888;'>"
+                    f"{label}<br><span style='font-size:1.5em'>N/A</span></div>",
+                    unsafe_allow_html=True
+                )
+    else:
+        st.info("No 'Match' column found in results.")
+else:
+    st.info("No results yet. Run a model to see accuracy here.")
+
 
 # --- Results Display ---
 st.header("Results")
