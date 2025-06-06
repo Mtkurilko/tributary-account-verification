@@ -223,7 +223,31 @@ def save_visualization(
 ) -> None:
     net = visualize_graph(db, **kwargs)
     if net:
+        # get the width parameter to set card width
+        width = kwargs.get("width", "100%")
+
+        # generate the html
         net.show(filename)
+
+        with open(filename, "r") as f:
+            html_content = f.read()
+
+        fix_viewport = f"""
+        <style>
+        .card {{
+            width: {width} !important;
+            max-width: {width} !important;
+            margin: 0 auto;
+            box-sizing: border-box;
+        }}
+        </style
+        """
+
+        html_content = html_content.replace("</head>", fix_viewport + "</head>")
+
+        with open(filename, "w") as f:
+            f.write(html_content)
+
         print(f"graph visualization saved to {filename}")
     else:
         print("failed to create visualization - empty graph")
