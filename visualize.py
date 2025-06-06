@@ -234,13 +234,18 @@ def save_visualization(
 
         fix_viewport = f"""
         <style>
+        body, html {{
+            margin: 0 !important;
+            padding: 0 !important;
+        }}
         .card {{
             width: {width} !important;
             max-width: {width} !important;
             margin: 0 auto;
+            padding: 0 !important;
             box-sizing: border-box;
         }}
-        </style
+        </style>
         """
 
         html_content = html_content.replace("</head>", fix_viewport + "</head>")
