@@ -6,14 +6,12 @@ also generates comparison sequences for training transformer-based models off
 of realistic data
 follows the tributary-account-verification database schema
 
-date: 06/04/2025
+date: 06/06/2025
 author: thomas bruce
-last update: major refactor, remove duplicated datasets, make generator tweakable
+last update: NANP phone numbers, moved data to another file
 """
 
 # TODO:
-# - move hard-coded datasets to external files and expand
-# - split up for modularity/readability
 # - finalize timestamp creation system for simulated sybil attacks
 # - improve consistency of name variation
 
@@ -31,228 +29,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db.gdb import GraphDatabase
 
 from faker import Faker
-
-# constants
-DEFAULT_DUPLICATE_LIKELIHOOD = 0.1
-DEFAULT_SEQUENCE_STEPS = 5
-EXACT_DUPLICATE_CHANCE = 0.02
-FAMILY_REUSE_LIKELIHOOD = 0.4
-BIRTH_YEAR_START = 1920
-BIRTH_YEAR_END = 2020
-DEATH_CHANCE_PRE_1960 = 0.15
-BIRTH_CITY_CHANCE = 0.8
-MIN_DEATH_AGE_YEARS = 20
-MAX_DEATH_AGE_YEARS = 100
-SEQUENCE_TIME_INCREMENT_DAYS = 30
-
-# email TLDs
-EMAIL_DOMAINS = [
-    "gmail.com",
-    "yahoo.com",
-    "hotmail.com",
-    "proton.me",
-    "aol.com",
-    "outlook.com",
-    "yandex.ru",
-    "protonmail.com",
-    "tutanota.com",
-    "posteo.de",
-    "startmail.com",
-    "disroot.org",
-    "mailbox.org",
-]
-
-# major us cities
-# TODO: move this to an external file and include international locations
-US_CITIES = [
-    "New York",
-    "Los Angeles",
-    "Chicago",
-    "Houston",
-    "Phoenix",
-    "Philadelphia",
-    "San Antonio",
-    "San Diego",
-    "Dallas",
-    "San Jose",
-    "Austin",
-    "Jacksonville",
-    "Fort Worth",
-    "Columbus",
-    "Charlotte",
-    "San Francisco",
-    "Indianapolis",
-    "Seattle",
-    "Denver",
-    "Washington",
-    "Boston",
-    "El Paso",
-    "Nashville",
-    "Detroit",
-    "Oklahoma City",
-    "Portland",
-    "Las Vegas",
-    "Memphis",
-    "Louisville",
-    "Baltimore",
-    "Milwaukee",
-    "Albuquerque",
-    "Tucson",
-    "Fresno",
-    "Sacramento",
-    "Kansas City",
-    "Long Beach",
-    "Mesa",
-    "Atlanta",
-    "Colorado Springs",
-    "Virginia Beach",
-    "Raleigh",
-    "Omaha",
-    "Miami",
-    "Oakland",
-    "Minneapolis",
-    "Tulsa",
-    "Wichita",
-    "New Orleans",
-]
-
-# common name cleaning - titles, prefixes, and suffixes to remove
-BLOCKED_NAME_TERMS = {
-    # titles/prefixes
-    "dr.",
-    "dr",
-    "prof.",
-    "prof",
-    "professor",
-    "mr.",
-    "mr",
-    "mrs.",
-    "mrs",
-    "ms.",
-    "ms",
-    "miss",
-    "sir",
-    "lord",
-    "lady",
-    "hon.",
-    "hon",
-    "rev.",
-    "rev",
-    "reverend",
-    "father",
-    "fr.",
-    "fr",
-    "sister",
-    "sr.",
-    "brother",
-    "br.",
-    "captain",
-    "capt.",
-    "capt",
-    "major",
-    "col.",
-    "colonel",
-    "general",
-    "gen.",
-    "admiral",
-    "sergeant",
-    "sgt.",
-    "lieutenant",
-    "lt.",
-    # professional suffixes
-    "md",
-    "dvm",
-    "phd",
-    "dds",
-    "do",
-    "jd",
-    "esq",
-    "esq.",
-    "cpa",
-    "rn",
-    "pharmd",
-    "dpt",
-    "edd",
-    "psyd",
-    "dnp",
-    "crna",
-    "pa",
-    "np",
-    # name suffixes
-    "jr.",
-    "jr",
-    "sr.",
-    "sr",
-    "ii",
-    "iii",
-    "iv",
-    "v",
-    "vi",
-    "1st",
-    "2nd",
-    "3rd",
-    "4th",
-    "5th",
-    # other
-    "the",
-    "von",
-    "van",
-    "de",
-    "del",
-    "da",
-    "di",
-    "du",
-}
-
-# qwerty keyboard adjacent key mappings for realistic typos
-ADJACENT_KEYS = {
-    "a": "s",
-    "s": "a",
-    "d": "s",
-    "f": "d",
-    "g": "f",
-    "h": "g",
-    "j": "h",
-    "k": "j",
-    "l": "k",
-    "q": "w",
-    "w": "q",
-    "e": "w",
-    "r": "e",
-    "t": "r",
-    "y": "t",
-    "u": "y",
-    "i": "u",
-    "o": "i",
-    "p": "o",
-    "z": "x",
-    "x": "z",
-    "c": "x",
-    "v": "c",
-    "b": "v",
-    "n": "b",
-    "m": "n",
-}
-
-# common vowel substitutions for realistic typos
-VOWEL_SWAPS = {"a": "e", "e": "a", "i": "y", "y": "i", "o": "u", "u": "o"}
-
-# common nickname mappings
-# TODO: move to an external file to expand dataset
-NICKNAME_MAPPINGS = {
-    "William": "Bill",
-    "Robert": "Bob",
-    "Richard": "Dick",
-    "Michael": "Mike",
-    "Christopher": "Chris",
-    "Matthew": "Matt",
-    "Anthony": "Tony",
-    "Elizabeth": "Liz",
-    "Katherine": "Kate",
-    "Jennifer": "Jen",
-    "Rebecca": "Becky",
-    "Jessica": "Jess",
-}
+from data import *
 
 
 class Generator:
@@ -381,6 +158,19 @@ class Generator:
         domain = random.choice(EMAIL_DOMAINS)
         return f"{username}@{domain}"
 
+    def _generate_phone_number(self) -> str:
+        """generate nanp phone numbers from reserved area codes"""
+        # reserved and fictional area codes from dataset
+        area_code = random.choice(NANP_AREA_CODES)
+
+        # exchange code
+        exchange = f"{random.randint(2, 9)}{random.randint(0, 9)}{random.randint(0, 9)}"
+
+        # subscriber number
+        subscriber = f"{random.randint(0, 9999):04d}"
+
+        return f"{area_code}{exchange}{subscriber}"
+
     def generate_person(self) -> Tuple[str, Dict[str, Any]]:
         """generate a single person with potential for duplicates."""
         # check for duplicate generation
@@ -401,6 +191,13 @@ class Generator:
             random.choice(US_CITIES) if random.random() < BIRTH_CITY_CHANCE else None
         )
 
+        # optional phone number, 90%
+        phone_number = (
+            self._generate_phone_number()
+            if random.random() < PHONE_NUMBER_CHANCE
+            else None
+        )
+
         # build metadata
         metadata = {
             "first_name": first_name,
@@ -417,6 +214,8 @@ class Generator:
             metadata["date_of_death"] = death_date.strftime("%Y-%m-%d")
         if birth_city:
             metadata["birth_city"] = birth_city
+        if phone_number:
+            metadata["phone_number"] = phone_number
 
         # store for potential duplicate generation
         self.existing_people.append((uid, metadata))
@@ -495,6 +294,20 @@ class Generator:
         domain = random.choice(EMAIL_DOMAINS)
         metadata["email"] = f"{username}@{domain}"
 
+    def _apply_phone_variation(self, metadata: Dict[str, Any]) -> None:
+        """apply phone number variations for similar person generation"""
+        if "phone_number" in metadata:
+            # 30% chance to remove phone number entirely
+            if random.random() < 0.3:
+                del metadata["phone_number"]
+            else:
+                # generate a new phone number (representing different phone/carrier)
+                metadata["phone_number"] = self._generate_phone_number()
+        else:
+            # 20% chance to add a phone number
+            if random.random() < 0.2:
+                metadata["phone_number"] = self._generate_phone_number()
+
     def _generate_similar_person(self) -> Tuple[str, Dict[str, Any]]:
         """generate a similar person for duplicate testing."""
         base_uid, base_metadata = random.choice(self.existing_people)
@@ -518,6 +331,11 @@ class Generator:
         # TODO: make globally tweakable!
         if random.random() < 0.65:
             self._apply_email_variation(metadata)
+
+        # phone number variations
+        # TODO: make globally tweakable!
+        if random.random() < 0.4:
+            self._apply_phone_variation(metadata)
 
         # birth city variations
         # TODO: make globally tweakable!
@@ -568,39 +386,180 @@ class Generator:
         return sequence
 
 
-class ConnectionGenerator:
-    """generate edges to connect nodes with realistic relationship patterns"""
+class FamilyGenerator:
+    """generate realistic family structures with proper genealogical relationships"""
 
     def __init__(self, people: List[Tuple[str, Dict[str, Any]]]):
         self.people = people
+        self.families = {}  # family_id -> list of people
+        self.family_trees = {}  # family_id -> tree structure
 
-    def generate_connections(self, num_edges: int) -> List[Dict[str, Any]]:
-        """generate connections between people with family and random relationships"""
-        connections = []
-
-        # group people by last name for family connections
+    def create_family_structures(self) -> Dict[str, List[Tuple[str, Dict[str, Any]]]]:
+        """organize people into realistic family units"""
+        # group by last name as starting point
         by_last_name = {}
         for uid, metadata in self.people:
             last_name = metadata["last_name"]
             by_last_name.setdefault(last_name, []).append((uid, metadata))
 
+        # create family units, considering ages and names
+        family_id = 0
+        for last_name, people_with_name in by_last_name.items():
+            if len(people_with_name) < 2:
+                continue
+
+            # sort by birth date to establish generations
+            people_with_name.sort(key=lambda x: x[1]["date_of_birth"])
+
+            # group into generations (20+ year gaps indicate new generation)
+            generations = []
+            current_gen = [people_with_name[0]]
+
+            for person in people_with_name[1:]:
+                birth_year = int(person[1]["date_of_birth"][:4])
+                last_birth_year = int(current_gen[-1][1]["date_of_birth"][:4])
+
+                if birth_year - last_birth_year > 20:
+                    generations.append(current_gen)
+                    current_gen = [person]
+                else:
+                    current_gen.append(person)
+
+            if current_gen:
+                generations.append(current_gen)
+
+            # create family tree structure
+            if len(generations) >= 2:
+                self.families[f"family_{family_id}"] = people_with_name
+                self.family_trees[f"family_{family_id}"] = generations
+                family_id += 1
+
+        return self.families
+
+    def generate_family_connections(self, target_count: int) -> List[Dict[str, Any]]:
+        """generate realistic family relationships"""
+        connections = []
+
+        for family_id, generations in self.family_trees.items():
+            family_connections = []
+
+            # parent-child relationships between consecutive generations
+            for i in range(len(generations) - 1):
+                parents = generations[i]
+                children = generations[i + 1]
+
+                # create parent-child connections
+                for parent_uid, parent_data in parents:
+                    for child_uid, child_data in children:
+                        # check age difference is realistic for parent-child (15-50 years)
+                        parent_birth = int(parent_data["date_of_birth"][:4])
+                        child_birth = int(child_data["date_of_birth"][:4])
+                        age_diff = child_birth - parent_birth
+
+                        if 15 <= age_diff <= 50:
+                            family_connections.append(
+                                {
+                                    "source": parent_uid,
+                                    "target": child_uid,
+                                    "directed": True,
+                                    "metadata": {
+                                        "type": "family",
+                                        "relationship": "parent_child",
+                                        "family_id": family_id,
+                                    },
+                                }
+                            )
+
+            # sibling relationships within same generation
+            for generation in generations:
+                if len(generation) > 1:
+                    for i, (uid1, data1) in enumerate(generation):
+                        for uid2, data2 in generation[i + 1 :]:
+                            # siblings should be born within 15 years of each other
+                            birth1 = int(data1["date_of_birth"][:4])
+                            birth2 = int(data2["date_of_birth"][:4])
+
+                            if abs(birth1 - birth2) <= 15:
+                                family_connections.append(
+                                    {
+                                        "source": uid1,
+                                        "target": uid2,
+                                        "directed": False,
+                                        "metadata": {
+                                            "type": "family",
+                                            "relationship": "sibling",
+                                            "family_id": family_id,
+                                        },
+                                    }
+                                )
+
+            # spouse relationships (different last names, similar ages)
+            for person_uid, person_data in self.people:
+                if person_data["last_name"] == family_id.split("_")[1]:
+                    continue
+
+                # find potential spouses in this family
+                for family_person_uid, family_person_data in self.families.get(
+                    family_id, []
+                ):
+                    person_birth = int(person_data["date_of_birth"][:4])
+                    family_birth = int(family_person_data["date_of_birth"][:4])
+
+                    # spouses typically within 10 years age difference
+                    if abs(person_birth - family_birth) <= 10 and random.random() < 0.1:
+                        family_connections.append(
+                            {
+                                "source": person_uid,
+                                "target": family_person_uid,
+                                "directed": False,
+                                "metadata": {
+                                    "type": "family",
+                                    "relationship": "spouse",
+                                    "family_id": family_id,
+                                },
+                            }
+                        )
+
+            connections.extend(family_connections)
+
+        return connections[:target_count]
+
+
+class ConnectionGenerator:
+    """generate edges to connect nodes with realistic relationship patterns"""
+
+    def __init__(self, people: List[Tuple[str, Dict[str, Any]]]):
+        self.people = people
+        self.family_gen = FamilyGenerator(people)
+
+    def generate_connections(self, num_edges: int) -> List[Dict[str, Any]]:
+        """generate connections with realistic family structures"""
+        connections = []
+
+        # create family structures
+        print("  organizing family structures")
+        families = self.family_gen.create_family_structures()
+        print(f"  created {len(families)} family units")
+
         # connection types with distribution ratios
         connection_types = [
-            ("family", self._generate_family_connections, by_last_name, 0.3),
-            ("random", self._generate_random_connections, None, 0.7),
+            ("family", self.family_gen.generate_family_connections, 0.4),
+            ("random", self._generate_random_connections, 0.6),
         ]
 
         # distribute edges across connection types
         remaining_edges = num_edges
-        for i, (conn_type, generator, groups, ratio) in enumerate(connection_types):
+        for i, (conn_type, generator, ratio) in enumerate(connection_types):
             if i == len(connection_types) - 1:
                 edges_count = remaining_edges
             else:
                 edges_count = int(num_edges * ratio)
                 remaining_edges -= edges_count
 
-            new_connections = generator(groups, edges_count)
+            new_connections = generator(edges_count)
             connections.extend(new_connections)
+
+            print(f"  generated {len(new_connections)} {conn_type} connections")
 
         # remove duplicates and self-loops
         return self._deduplicate_connections(connections, num_edges)
@@ -626,50 +585,7 @@ class ConnectionGenerator:
 
         return unique_connections[:max_count]
 
-    def _generate_family_connections(
-        self, by_last_name: Dict[str, List], count: int
-    ) -> List[Dict[str, Any]]:
-        """generate family connections based on shared last names and age differences"""
-        connections = []
-        families = [family for family in by_last_name.values() if len(family) > 1]
-
-        for _ in range(count):
-            if not families:
-                break
-
-            family = random.choice(families)
-            if len(family) < 2:
-                continue
-
-            person1, person2 = random.sample(family, 2)
-
-            # determine relationship based on age difference
-            # TODO: come up with a smarter way to do this
-            age1 = datetime.now().year - int(person1[1]["date_of_birth"][:4])
-            age2 = datetime.now().year - int(person2[1]["date_of_birth"][:4])
-            age_diff = abs(age1 - age2)
-
-            if age_diff > 20:
-                relationship = "parent_child"
-            elif age_diff < 5:
-                relationship = "sibling"
-            else:
-                relationship = "relative"
-
-            connections.append(
-                {
-                    "source": person1[0],
-                    "target": person2[0],
-                    "directed": False,
-                    "metadata": {"type": "family", "relationship": relationship},
-                }
-            )
-
-        return connections
-
-    def _generate_random_connections(
-        self, groups: None, count: int
-    ) -> List[Dict[str, Any]]:
+    def _generate_random_connections(self, count: int) -> List[Dict[str, Any]]:
         """generate random connections between people"""
         connections = []
 
@@ -737,10 +653,16 @@ def generate_dataset(
 
     # print statistics
     similar_count = int(num_people * duplicate_likelihood)
+    family_connections = len(
+        [c for c in connections if c["metadata"].get("type") == "family"]
+    )
+
     print(f"\ndataset generation complete!")
     print(f"generated {num_people} people with ~{similar_count} potential duplicates")
     print(f"unique last names: {len(person_gen.used_last_names)}")
-    print(f"generated {len(connections)} connections")
+    print(f"generated {len(connections)} connections:")
+    print(f"  - {family_connections} family relationships")
+    print(f"  - {len(connections) - family_connections} random connections")
 
 
 def generate_sequences(
@@ -816,6 +738,7 @@ def main() -> None:
         default=DEFAULT_DUPLICATE_LIKELIHOOD,
         help=f"likelihood of generating similar/duplicate people (0.0-1.0, default: {DEFAULT_DUPLICATE_LIKELIHOOD})",
     )
+
     parser.add_argument(
         "-s",
         "--sequence",
