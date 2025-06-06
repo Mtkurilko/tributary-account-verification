@@ -258,12 +258,12 @@ def main():
     )
     parser.add_argument(
         "--height",
-        default="600px",
+        default="90vh",
         help="height of the visualization",
     )
     parser.add_argument(
         "--width",
-        default="100%",
+        default="90vw",
         help="width of the visualization",
     )
 
