@@ -2,6 +2,7 @@ Faker==37.3.0
 networkx==3.5
 numpy==2.3.0
 pandas==2.3.0
+python-dotenv==1.1.0
 pyvis==0.3.2
 streamlit==1.45.1
 torch==2.7.1
