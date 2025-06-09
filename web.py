@@ -13,6 +13,7 @@ import time
 
 from dataset.generate import generate_from_args
 from linkage_deduplication.main import module_run
+from visualize import visualize_graph_from_file
 
 
 MATCH_THRESHOLD = 0.9  # Probability above this is considered a match
@@ -107,6 +108,8 @@ else:
             f.write(uploaded_file.getbuffer())
     elif os.path.exists("dataset/dataset.json"):
         dataset_path = "dataset/dataset.json"
+
+    visualize_graph_from_file(dataset_path)
 
 # --- Training and Model Options ---
 st.sidebar.markdown("---")
