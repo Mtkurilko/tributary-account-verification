@@ -364,6 +364,9 @@ def save_visualization(
     else:
         print("failed to create visualization - empty graph")
 
+def visualize_graph_from_file(database_file: str):
+    db = GraphDatabase(database_file)
+    save_visualization(db, filename="graph.html")
 
 def main():
     parser = argparse.ArgumentParser(description="visualize graph database")
