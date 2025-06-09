@@ -9,7 +9,7 @@ A research and benchmarking suite for evaluating and developing account linkage 
 
 ## Overview
 
-This repository provides tools for generating realistic synthetic identity datasets, running and evaluating multiple linkage/deduplication models, and visualizing results. It is designed for research and benchmarking in the context of the [Tributary](atributary.com) project, but is general enough for broader use in entity resolution and identity graph research.
+This repository provides tools for generating realistic synthetic identity datasets, running and evaluating multiple linkage/deduplication models, and visualizing results. It is designed for research and benchmarking in the context of the [Tributary](https://atributary.com) project, but is general enough for broader use in entity resolution and identity graph research.
 
 ---
 
