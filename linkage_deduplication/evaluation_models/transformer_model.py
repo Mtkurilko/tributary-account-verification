@@ -7,6 +7,7 @@ transformer-based similarity scorer using TORCH!
 
 import os
 import sys
+import time
 
 import multiprocessing as mp
 
@@ -29,29 +30,21 @@ class LazyDataset(Dataset):
     """
 
     def __init__(self, subject_pairs, labels, feature_list, max_len=32):
+        # Store raw subject pairs and labels
         self.subject_pairs = subject_pairs
         self.labels = torch.tensor(labels, dtype=torch.float32)
         self.feature_list = feature_list
         self.max_len = max_len
 
-        # pre-cache strings
-        self.processed_pairs = []
-        for i, (subj1, subj2) in enumerate(subject_pairs):
-            if i % 100000 == 0:
-                print(f"cached {i}/{len(subject_pairs)} pairs...")
-
-            subj1_data = {f: getattr(subj1, f, "") for f in self.feature_list}
-            subj2_data = {f: getattr(subj2, f, "") for f in self.feature_list}
-
-            self.processed_pairs.append((subj1_data, subj2_data))
-
-        print(f"pre-processing complete: {len(self.processed_pairs)} pairs ready")
-
+        # ADDING THIS LINE:
+        print(f"Dataset initialized with {len(subject_pairs)} raw pairs. Processing will happen on demand.")
+   
     def __len__(self):
-        return len(self.processed_pairs)
+        return len(self.subject_pairs)
 
-    def _get_subject_string_from_dict(self, subject_dict):
-        return " ".join([str(subject_dict.get(f, "")) for f in self.feature_list])
+    def _get_subject_string_from_dict(self, subject_obj): # <--- CHANGED PARAMETER NAME
+        # This function now takes the raw subject object and extracts features
+        return " ".join([str(getattr(subject_obj, f, "")) for f in self.feature_list])
 
     def _byte_encode(self, s):
         """encode string to byte tensor"""
@@ -60,16 +53,41 @@ class LazyDataset(Dataset):
         return torch.tensor(arr, dtype=torch.long)
 
     def __getitem__(self, idx):
-        subj1_data, subj2_data = self.processed_pairs[idx]
+        # --- ADD THESE TIMING LINES ---
+        # Note: Do NOT keep these print statements enabled for full training runs
+        # as they will add significant overhead. Use them only for profiling a few batches.
+        start_getitem_time = time.time()
+        # --- END TIMING ADDITIONS ---
 
-        s1 = self._get_subject_string_from_dict(subj1_data)
-        s2 = self._get_subject_string_from_dict(subj2_data)
+        subj1, subj2 = self.subject_pairs[idx]
+        label = self.labels[idx]
 
+        # --- ADD THESE TIMING LINES ---
+        start_string_time = time.time()
+        # --- END TIMING ADDITIONS ---
+        s1 = self._get_subject_string_from_dict(subj1)
+        s2 = self._get_subject_string_from_dict(subj2)
+        # --- ADD THESE TIMING LINES ---
+        end_string_time = time.time()
+        print(f"  Stringification for item {idx}: {end_string_time - start_string_time:.6f} seconds")
+        # --- END TIMING ADDITIONS ---
+
+        # --- ADD THESE TIMING LINES ---
+        start_encode_time = time.time()
+        # --- END TIMING ADDITIONS ---
         arr1 = self._byte_encode(s1)
         arr2 = self._byte_encode(s2)
+        # --- ADD THESE TIMING LINES ---
+        end_encode_time = time.time()
+        print(f"  Byte encoding for item {idx}: {end_encode_time - start_encode_time:.6f} seconds")
+        # --- END TIMING ADDITIONS ---
 
-        return arr1, arr2, self.labels[idx]
+        # --- ADD THESE TIMING LINES ---
+        end_getitem_time = time.time()
+        print(f"Total __getitem__ time for item {idx}: {end_getitem_time - start_getitem_time:.6f} seconds\n")
+        # --- END TIMING ADDITIONS ---
 
+        return arr1, arr2, label
 
 # old PreEncodedDataset (commented for reference)
 # class PreEncodedDataset(Dataset):
