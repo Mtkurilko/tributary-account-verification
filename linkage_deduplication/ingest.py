@@ -60,7 +60,7 @@ def create_pair_chunk(subjects, chunk_range):
     return pairs
 
 
-def ingest_data(file_path, use_multiprocessing=True, num_workers=None):
+def ingest_data(file_path, use_multiprocessing=True, num_workers=12):
     """
     Ingest data from a JSON file and create Subject instances.
 
