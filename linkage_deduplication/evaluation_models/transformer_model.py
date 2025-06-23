@@ -22,23 +22,26 @@ from torch.utils.data import Dataset, DataLoader
 # Only set if not already set to avoid conflicts
 try:
     if mp.get_start_method(allow_none=True) is None:
-        if sys.platform.startswith('linux') or sys.platform.startswith('darwin'):
-            mp.set_start_method('spawn', force=True)
-        elif sys.platform.startswith('win'):
-            mp.set_start_method('spawn', force=True)
+        if sys.platform.startswith("linux") or sys.platform.startswith("darwin"):
+            mp.set_start_method("spawn", force=True)
+        elif sys.platform.startswith("win"):
+            mp.set_start_method("spawn", force=True)
 except RuntimeError as e:
     print(f"Warning: Could not set multiprocessing start method: {e}")
 
 # Configure logging to work with multiprocessing
-logging.basicConfig(level=logging.INFO, format='%(processName)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(processName)s - %(message)s")
 logger = logging.getLogger(__name__)
+
 
 class LazyDataset(Dataset):
     """
     lazy dataset on demand encoding
     """
 
-    def __init__(self, subject_pairs, labels, feature_list, max_len=32, debug_mode=False):
+    def __init__(
+        self, subject_pairs, labels, feature_list, max_len=32, debug_mode=False
+    ):
         # Store raw subject pairs and labels
         self.subject_pairs = subject_pairs
         self.labels = torch.tensor(labels, dtype=torch.float32)
@@ -47,8 +50,10 @@ class LazyDataset(Dataset):
         self.debug_mode = debug_mode
 
         # Use logging instead of print for multiprocessing compatibility
-        logger.info(f"Dataset initialized with {len(subject_pairs)} raw pairs. Processing will happen on demand.")
-   
+        logger.info(
+            f"Dataset initialized with {len(subject_pairs)} raw pairs. Processing will happen on demand."
+        )
+
     def __len__(self):
         return len(self.subject_pairs)
 
@@ -72,30 +77,37 @@ class LazyDataset(Dataset):
 
         if self.debug_mode:
             start_string_time = time.time()
-        
+
         s1 = self._get_subject_string_from_dict(subj1)
         s2 = self._get_subject_string_from_dict(subj2)
-        
+
         if self.debug_mode:
             end_string_time = time.time()
             # Use logging instead of print for multiprocessing
-            logger.info(f"Stringification for item {idx}: {end_string_time - start_string_time:.6f} seconds")
+            logger.info(
+                f"Stringification for item {idx}: {end_string_time - start_string_time:.6f} seconds"
+            )
 
         if self.debug_mode:
             start_encode_time = time.time()
-        
+
         arr1 = self._byte_encode(s1)
         arr2 = self._byte_encode(s2)
-        
+
         if self.debug_mode:
             end_encode_time = time.time()
-            logger.info(f"Byte encoding for item {idx}: {end_encode_time - start_encode_time:.6f} seconds")
+            logger.info(
+                f"Byte encoding for item {idx}: {end_encode_time - start_encode_time:.6f} seconds"
+            )
 
         if self.debug_mode:
             end_getitem_time = time.time()
-            logger.info(f"Total __getitem__ time for item {idx}: {end_getitem_time - start_getitem_time:.6f} seconds")
+            logger.info(
+                f"Total __getitem__ time for item {idx}: {end_getitem_time - start_getitem_time:.6f} seconds"
+            )
 
         return arr1, arr2, label
+
 
 # old PreEncodedDataset (commented for reference)
 # class PreEncodedDataset(Dataset):
@@ -241,18 +253,49 @@ class TransformerModel(nn.Module):
         return self._compute_similarity(vec1, vec2)
 
     def train_transformer(
-        self, subject_pairs, labels, epochs=10, lr=1e-3, device="cuda", batch_size=32, debug_mode=False
+        self,
+        subject_pairs,
+        labels,
+        epochs=10,
+        lr=1e-3,
+        device="cuda",
+        batch_size=32,
+        debug_mode=False,
     ):
-        # multi-gpu setup
-        use_multi_gpu = torch.cuda.device_count() > 1
-        dp_model = nn.DataParallel(self) if use_multi_gpu else self
-        dp_model.to(device)
+        # Enhanced multi-GPU setup for Tesla K80s
+        if torch.cuda.is_available():
+            num_gpus = torch.cuda.device_count()
+            print(f"CUDA available with {num_gpus} GPUs")
+            for i in range(num_gpus):
+                gpu_name = torch.cuda.get_device_name(i)
+                gpu_memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
+                print(f"  GPU {i}: {gpu_name} ({gpu_memory:.1f} GB)")
+
+            # Optimize batch size for Tesla K80s (12GB each)
+            if num_gpus >= 4:  # Multi-GPU setup
+                batch_size = max(batch_size, 128)  # Larger batches for multi-GPU
+
+            use_multi_gpu = num_gpus > 1
+            if use_multi_gpu:
+                print(f"Using DataParallel across {num_gpus} GPUs")
+                dp_model = nn.DataParallel(self)
+            else:
+                dp_model = self
+            dp_model.to(device)
+        else:
+            print("CUDA not available, falling back to CPU")
+            device = "cpu"
+            dp_model = self.to(device)
+            use_multi_gpu = False
+
         opt = torch.optim.Adam(self.parameters(), lr=lr)
         eps = 1e-7
 
         # create dataset/dataloader with lazy loading
         print(f"creating lazy dataset for {len(subject_pairs)} pairs...")
-        dataset = LazyDataset(subject_pairs, labels, self.feature_list, debug_mode=debug_mode)
+        dataset = LazyDataset(
+            subject_pairs, labels, self.feature_list, debug_mode=debug_mode
+        )
 
         # debug info
         print(f"system info:")
@@ -263,19 +306,34 @@ class TransformerModel(nn.Module):
         # calculate number of workers and batch size
         total_pairs = len(subject_pairs)
 
-        # Adjust multiprocessing settings based on dataset size and platform
-        if total_pairs > 1000000:
-            batch_size = max(batch_size, 64)
-            # Reduce workers for very large datasets to avoid memory issues
-            num_workers = min(max(1, mp.cpu_count() - 2), 8)
-            prefetch_factor = 4
-        elif total_pairs > 100000:
-            num_workers = min(max(1, mp.cpu_count() - 1), 12)
-            prefetch_factor = 2
+        # Adjust multiprocessing settings based on dataset size and GPU setup
+        if torch.cuda.is_available() and num_gpus >= 4:
+            # Optimize for multi-GPU Tesla K80 setup
+            if total_pairs > 1000000:
+                batch_size = max(batch_size, 256)  # Large batches for multi-GPU
+                num_workers = min(
+                    max(2, mp.cpu_count() - 4), 16
+                )  # Leave cores for GPU management
+                prefetch_factor = 6
+            elif total_pairs > 100000:
+                batch_size = max(batch_size, 128)
+                num_workers = min(max(2, mp.cpu_count() - 2), 12)
+                prefetch_factor = 4
+            else:
+                num_workers = min(max(1, mp.cpu_count() // 2), 8)
+                prefetch_factor = 2
         else:
-            # For smaller datasets, single-threaded might be faster due to overhead
-            num_workers = min(max(1, mp.cpu_count() // 2), 4)
-            prefetch_factor = 2
+            # Standard settings for single GPU or CPU
+            if total_pairs > 1000000:
+                batch_size = max(batch_size, 64)
+                num_workers = min(max(1, mp.cpu_count() - 2), 8)
+                prefetch_factor = 4
+            elif total_pairs > 100000:
+                num_workers = min(max(1, mp.cpu_count() - 1), 12)
+                prefetch_factor = 2
+            else:
+                num_workers = min(max(1, mp.cpu_count() // 2), 4)
+                prefetch_factor = 2
 
         # Disable multiprocessing for debug mode to see print statements
         if debug_mode:
@@ -300,7 +358,9 @@ class TransformerModel(nn.Module):
                 prefetch_factor=prefetch_factor if num_workers > 0 else None,
                 persistent_workers=True if num_workers > 0 else False,
                 drop_last=True,
-                timeout=30 if num_workers > 0 else 0,  # Add timeout for worker processes
+                timeout=(
+                    30 if num_workers > 0 else 0
+                ),  # Add timeout for worker processes
             )
         except Exception as e:
             print(f"Error creating DataLoader with {num_workers} workers: {e}")
@@ -318,9 +378,22 @@ class TransformerModel(nn.Module):
         for epoch in range(epochs):
             total_loss = 0.0
             num_batches = 0
-            
+
+            # CUDA memory management for Tesla K80s
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()  # Clear cache before each epoch
+                if epoch == 0:  # Show memory info on first epoch
+                    for i in range(torch.cuda.device_count()):
+                        allocated = torch.cuda.memory_allocated(i) / 1024**3
+                        cached = torch.cuda.memory_reserved(i) / 1024**3
+                        print(
+                            f"  GPU {i} memory: {allocated:.2f}GB allocated, {cached:.2f}GB cached"
+                        )
+
             try:
-                for batch_arr1, batch_arr2, batch_labels in loader:
+                for batch_idx, (batch_arr1, batch_arr2, batch_labels) in enumerate(
+                    loader
+                ):
                     batch_arr1 = batch_arr1.to(device)
                     batch_arr2 = batch_arr2.to(device)
                     batch_labels = batch_labels.to(device)
@@ -331,7 +404,9 @@ class TransformerModel(nn.Module):
                     # compute batch similarities
                     batch_preds = []
                     for i in range(len(vec1_batch)):
-                        similarity = self._compute_similarity(vec1_batch[i], vec2_batch[i])
+                        similarity = self._compute_similarity(
+                            vec1_batch[i], vec2_batch[i]
+                        )
                         batch_preds.append(similarity)
 
                     batch_preds = torch.stack(batch_preds)
@@ -355,7 +430,19 @@ class TransformerModel(nn.Module):
                             f"NaN detected in loss! pred={batch_preds.cpu().detach().numpy()}, target={batch_labels.cpu().detach().numpy()}"
                         )
                         break
-                        
+
+                    # Monitor GPU memory usage for large batches
+                    if (
+                        torch.cuda.is_available()
+                        and batch_idx % 100 == 0
+                        and debug_mode
+                    ):
+                        for i in range(torch.cuda.device_count()):
+                            allocated = torch.cuda.memory_allocated(i) / 1024**3
+                            print(
+                                f"    Batch {batch_idx}, GPU {i}: {allocated:.2f}GB allocated"
+                            )
+
             except Exception as e:
                 print(f"Error during training epoch {epoch+1}: {e}")
                 if num_workers > 0:
