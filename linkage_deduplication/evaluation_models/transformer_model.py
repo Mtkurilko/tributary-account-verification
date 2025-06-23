@@ -5,6 +5,8 @@ Description: This module contains the TransformerModel class, which provides
 transformer-based similarity scorer using TORCH!
 """
 
+import multiprocessing as mp
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -12,29 +14,67 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
 
-class PreEncodedDataset(Dataset):
+class LazyDataset(Dataset):
     """
-    pre-encoded dataset
+    lazy dataset on demand encoding
     """
 
-    def __init__(self, subject_pairs, labels, model):
-        self.model = model
-        self.inputs = []
+    def __init__(self, subject_pairs, labels, feature_list, max_len=32):
+        self.subject_pairs = subject_pairs
         self.labels = torch.tensor(labels, dtype=torch.float32)
-        for subj1, subj2 in subject_pairs:
-            arr1 = model._byte_encode(
-                " ".join([str(getattr(subj1, f, "")) for f in model.feature_list])
-            )
-            arr2 = model._byte_encode(
-                " ".join([str(getattr(subj2, f, "")) for f in model.feature_list])
-            )
-            self.inputs.append((arr1, arr2))
+        self.feature_list = feature_list
+        self.max_len = max_len
 
     def __len__(self):
-        return len(self.inputs)
+        return len(self.subject_pairs)
+
+    def _get_subject_string(self, subject):
+        """convert subject to string representation"""
+        return " ".join([str(getattr(subject, f, "")) for f in self.feature_list])
+
+    def _byte_encode(self, s):
+        """encode string to byte tensor"""
+        arr = list(s.encode("utf-8")[: self.max_len])
+        arr = arr + [0] * (self.max_len - len(arr))
+        return torch.tensor(arr, dtype=torch.long)
 
     def __getitem__(self, idx):
-        return self.inputs[idx][0], self.inputs[idx][1], self.labels[idx]
+        subj1, subj2 = self.subject_pairs[idx]
+
+        # lazy loading
+        s1 = self._get_subject_string(subj1)
+        s2 = self._get_subject_string(subj2)
+
+        arr1 = self._byte_encode(s1)
+        arr2 = self._byte_encode(s2)
+
+        return arr1, arr2, self.labels[idx]
+
+
+# old PreEncodedDataset (commented for reference)
+# class PreEncodedDataset(Dataset):
+#     """
+#     pre-encoded dataset - MEMORY INTENSIVE, avoid for large datasets
+#     """
+#
+#     def __init__(self, subject_pairs, labels, model):
+#         self.model = model
+#         self.inputs = []
+#         self.labels = torch.tensor(labels, dtype=torch.float32)
+#         for subj1, subj2 in subject_pairs:
+#             arr1 = model._byte_encode(
+#                 " ".join([str(getattr(subj1, f, "")) for f in model.feature_list])
+#             )
+#             arr2 = model._byte_encode(
+#                 " ".join([str(getattr(subj2, f, "")) for f in model.feature_list])
+#             )
+#             self.inputs.append((arr1, arr2))
+#
+#     def __len__(self):
+#         return len(self.inputs)
+#
+#     def __getitem__(self, idx):
+#         return self.inputs[idx][0], self.inputs[idx][1], self.labels[idx]
 
 
 class TransformerModel(nn.Module):
@@ -164,15 +204,23 @@ class TransformerModel(nn.Module):
         opt = torch.optim.Adam(self.parameters(), lr=lr)
         eps = 1e-7
 
-        # create optimized dataset and dataloader
-        dataset = PreEncodedDataset(subject_pairs, labels, self)
+        # create dataset/dataloader with lazy loading
+        print(f"creating lazy dataset for {len(subject_pairs)} pairs...")
+        dataset = LazyDataset(subject_pairs, labels, self.feature_list)
+
+        # calculate optimal number of workers based on cpu cores
+        num_workers = min(
+            mp.cpu_count(), 20
+        )  # worker cap at 20, but we can maybe increase to 22?
+        print(f"Using {num_workers} worker processes for data loading")
+
         loader = DataLoader(
             dataset,
             batch_size=batch_size,
             shuffle=True,
-            num_workers=12,
+            num_workers=num_workers,
             pin_memory=True,
-            prefetch_factor=4,
+            prefetch_factor=2,  # reduced this from 4 to save memory, maybe increase?
             persistent_workers=True,
         )
 
