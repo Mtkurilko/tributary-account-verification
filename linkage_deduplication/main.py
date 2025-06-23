@@ -71,9 +71,11 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
     else:
         path = input("Enter the path to the dataset (dataset.json): ").strip()
 
-    subjects, subject_pairs  = ingest.ingest_data(path)  # Load subjects and pairs from dataset
+    # Load subjects and pairs from dataset with multiprocessing support
+    subjects, subject_pairs = ingest.ingest_data(path, use_multiprocessing=True)
 
-    labels = ingest.obtain_subject_labels(subject_pairs)  # Obtain labels for the subject pairs
+    # Obtain labels for the subject pairs with multiprocessing support  
+    labels = ingest.obtain_subject_labels(subject_pairs, use_multiprocessing=True)
     
     # Initialize results list to store output
     results = []
@@ -187,8 +189,10 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
             train_model = input("Do you want to train the TransformerModel? (Y/N): ").strip().lower()
 
         if train_model == 'y':
+            # Add debug mode option for transformer training
+            debug_mode = input("Enable debug mode to see timing info? (Y/N): ").strip().lower() == 'y'
             model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
-                                    lr=LEARNING_RATE_CONSTANT, device=RUN_ON)
+                                    lr=LEARNING_RATE_CONSTANT, device=RUN_ON, debug_mode=debug_mode)
 
             if doSaveModel.get("transformer") is not None:
                 save_model = ('y' if doSaveModel.get("transformer") == True else 'n')
@@ -301,10 +305,13 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
 
         if train_model_transformer == 'y':
             # Subject pair arew tuples of (subject1, subject2) and already created
-
+            
+            # Add debug mode option for transformer training
+            debug_mode = input("Enable debug mode to see timing info? (Y/N): ").strip().lower() == 'y'
+            
             #Train the model with the subject pairs and labels
             transformer_model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
-                                                lr=LEARNING_RATE_CONSTANT, device=RUN_ON)
+                                                lr=LEARNING_RATE_CONSTANT, device=RUN_ON, debug_mode=debug_mode)
 
             # Save the trained model (WHEN READY)
             if doSaveModel.get("transformer") is not None:
