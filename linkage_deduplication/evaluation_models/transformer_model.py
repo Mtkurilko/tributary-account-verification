@@ -5,6 +5,9 @@ Description: This module contains the TransformerModel class, which provides
 transformer-based similarity scorer using TORCH!
 """
 
+import os
+import sys
+
 import multiprocessing as mp
 
 import numpy as np
@@ -13,6 +16,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
+# debug, force multiprocessing using spawn
+if __name__ != '__main__':
+    try:
+        mp.set_start_method('spawn', force=True)
+    except RuntimeError:
+        pass
 
 class LazyDataset(Dataset):
     """
@@ -25,12 +34,24 @@ class LazyDataset(Dataset):
         self.feature_list = feature_list
         self.max_len = max_len
 
-    def __len__(self):
-        return len(self.subject_pairs)
+        # pre-cache strings
+        self.processed_pairs = []
+        for i, (subj1, subj2) in enumerate(subject_pairs):
+            if i % 100000 == 0:
+                print(f"cached {i}/{len(subject_pairs)} pairs...")
 
-    def _get_subject_string(self, subject):
-        """convert subject to string representation"""
-        return " ".join([str(getattr(subject, f, "")) for f in self.feature_list])
+            subj1_data = {f: getattr(subj1, f, "") for f in self.feature_list}
+            subj2_data = {f: getattr(subj2, f, "") for f in self.feature_list}
+
+            self.processed_pairs.append((subj1_data, subj2_data))
+
+        print(f"pre-processing complete: {len(self.processed_pairs)} pairs ready")
+
+    def __len__(self):
+        return len(self.processed_pairs)
+
+    def _get_subject_string_from_dict(self, subject_dict):
+        return " ".join([str(subject_dict.get(f, "")) for f in self.feature_list])
 
     def _byte_encode(self, s):
         """encode string to byte tensor"""
@@ -39,11 +60,10 @@ class LazyDataset(Dataset):
         return torch.tensor(arr, dtype=torch.long)
 
     def __getitem__(self, idx):
-        subj1, subj2 = self.subject_pairs[idx]
+        subj1_data, subj2_data = self.processed_pairs[idx]
 
-        # lazy loading
-        s1 = self._get_subject_string(subj1)
-        s2 = self._get_subject_string(subj2)
+        s1 = self._get_subject_string_from_dict(subj1_data)
+        s2 = self._get_subject_string_from_dict(subj2_data)
 
         arr1 = self._byte_encode(s1)
         arr2 = self._byte_encode(s2)
@@ -208,11 +228,27 @@ class TransformerModel(nn.Module):
         print(f"creating lazy dataset for {len(subject_pairs)} pairs...")
         dataset = LazyDataset(subject_pairs, labels, self.feature_list)
 
-        # calculate optimal number of workers based on cpu cores
-        num_workers = min(
-            mp.cpu_count(), 20
-        )  # worker cap at 20, but we can maybe increase to 22?
-        print(f"Using {num_workers} worker processes for data loading")
+        # debug info
+        print(f"system info:")
+        print(f" - cpu count: {mp.cpu_count()}")
+        print(f" - platform: {sys.platform}")
+        print(f" - mp start method: {mp.get_start_method()}")
+
+        # calculate number of workers and batch size
+        total_pairs = len(subject_pairs)
+
+        if total_pairs > 1000000:
+            batch_size = max(batch_size, 64)
+            num_workers = min(mp.cpu_count() - 2, 24)
+            prefetch_factor = 8
+        else:
+            num_workers = min(mp.cpu_count(), 20)
+            prefetch_factor = 2
+
+        print(f"settings:")
+        print(f" - batch size: {batch_size}")
+        print(f" - workers: {num_workers}")
+        print(f" - prefetch: {prefetch_factor}")
 
         loader = DataLoader(
             dataset,
@@ -220,8 +256,9 @@ class TransformerModel(nn.Module):
             shuffle=True,
             num_workers=num_workers,
             pin_memory=True,
-            prefetch_factor=2,  # reduced this from 4 to save memory, maybe increase?
+            prefetch_factor=prefetch_factor,
             persistent_workers=True,
+            drop_last=True
         )
 
         # original training loop (commented for reference)

@@ -204,33 +204,6 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
                 model.save(path)
                 print(f"TransformerModel saved to {path}")
 
-        # Print loading message
-        print("Running Transformer Model...")
-
-        # Run through each pair of subjects in the dataset
-        for i, (subject1, subject2) in enumerate(subject_pairs):
-            # Calculate the transformer similarity score
-            transformer_score = math.floor(
-                model.transformer_similarity(subject1, subject2)*10000
-                ) / 10000.0  # Round to 4 decimal places
-
-            is_match = labels[i] == 1
-            base_id = subject2.attributes.get('base_id') if is_match else ""
-
-            # Append results to the list
-            results.append({
-                "Row": i + 1,
-                "Subject1_UUID": subject1.attributes.get('uuid'),
-                "Subject2_UUID": subject2.attributes.get('uuid'),
-                "Gradient_Boosted_Score": "",
-                "Transformer_Similarity_Score": transformer_score,
-                "Felligi_Sunter_Similarity_Score": "",
-                "Match": "Yes" if is_match else "No",
-                "Base_ID": base_id
-            })
-
-        to_csv(results)  # Save results to CSV
-
     elif model_requested == 3:
         # Print loading message
         print("Running Fellegi-Sunter model...")
