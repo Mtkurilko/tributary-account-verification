@@ -18,19 +18,20 @@ from torch.utils.data import Dataset, DataLoader
 class PreEncodedDataset(Dataset):
     def __init__(self, subject_pairs, labels, model):
         self.model = model
-        self.inputs = []
+        self.subject_pairs = subject_pairs  # Store the raw subject pairs
         self.labels = torch.tensor(labels, dtype=torch.float32)
-        for subj1, subj2 in subject_pairs:
-            arr1 = model._byte_encode(" ".join([str(getattr(subj1, f, "")) for f in model.feature_list]))
-            arr2 = model._byte_encode(" ".join([str(getattr(subj2, f, "")) for f in model.feature_list]))
-            self.inputs.append((arr1, arr2))
 
     def __len__(self):
-        return len(self.inputs)
+        return len(self.subject_pairs)
 
     def __getitem__(self, idx):
-        return self.inputs[idx][0], self.inputs[idx][1], self.labels[idx]
+        subj1, subj2 = self.subject_pairs[idx]
 
+        # Encoding now happens here, for one pair at a time
+        arr1 = self.model._byte_encode(" ".join([str(getattr(subj1, f, "")) for f in self.model.feature_list]))
+        arr2 = self.model._byte_encode(" ".join([str(getattr(subj2, f, "")) for f in self.model.feature_list]))
+
+        return arr1, arr2, self.labels[idx]
 
 class TransformerModel(nn.Module):
     def __init__(self, embedding_dim=16, vocab_size=257):
@@ -120,7 +121,7 @@ class TransformerModel(nn.Module):
         return (similarity + 1) / 2  # Tensor in [0,1]
 
 
-    def train_transformer(self, subject_pairs, labels, epochs=10, lr=1e-3, device="cuda", batch_size=200000):
+    def train_transformer(self, subject_pairs, labels, epochs=10, lr=1e-3, device="cuda", batch_size=10000):
         use_multi_gpu = torch.cuda.device_count() > 1
         dp_model = nn.DataParallel(self) if use_multi_gpu else self
         dp_model.to(device)
@@ -128,7 +129,7 @@ class TransformerModel(nn.Module):
         eps = 1e-7
 
         dataset = PreEncodedDataset(subject_pairs, labels, self)
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True, prefetch_factor=4)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=12, pin_memory=True, prefetch_factor=10)
 
         print("Training with batch size:", batch_size)
 
@@ -136,7 +137,7 @@ class TransformerModel(nn.Module):
             dp_model.train()
             total_loss = 0.0
 
-            for arr1_batch, arr2_batch, label_batch in loader:
+            for i, (arr1_batch, arr2_batch, label_batch) in enumerate(loader):
                 arr1_batch = arr1_batch.to(device)
                 arr2_batch = arr2_batch.to(device)
                 label_batch = label_batch.unsqueeze(1).to(device)
@@ -156,6 +157,9 @@ class TransformerModel(nn.Module):
                 opt.step()
 
                 total_loss += loss.item() * arr1_batch.size(0)
+
+                if i % 100 == 0: # Print progress periodically
+                    print(f"  Batch {i}/{len(loader)}, Current Loss: {loss.item():.4f}")
 
             avg_loss = total_loss / len(dataset)
             print(f"Epoch {epoch + 1}/{epochs}, Average Loss: {avg_loss:.4f}")
