@@ -129,7 +129,7 @@ class TransformerModel(nn.Module):
         eps = 1e-7
 
         dataset = PreEncodedDataset(subject_pairs, labels, self)
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=12, pin_memory=True, prefetch_factor=10)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True, prefetch_factor=10)
 
         print("Training with batch size:", batch_size)
 
