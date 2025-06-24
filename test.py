@@ -7,13 +7,13 @@ from linkage_deduplication.main import module_run
 
 def main():
     # Example usage of the module_run function
-    model_requested = 4  # Choose the model to run
-    json_path = "dataset/dataset.json"  # Path to your JSON data file
+    model_requested = 2  # Choose the model to run
+    json_path = "dataset/train.json"  # Path to your JSON data file
     do_load_model = {"gradient": False, "transformer": False}  # Set to True if you want to load a pre-trained model
-    load_path = {"gradient": None, "transformer": None}  # Path to the pre-trained model if loading
-    do_train_model = {"gradient": False, "transformer": False}  # Set to True if you want to train the model
-    do_save_model = {"gradient": False, "transformer": False}  # Set to True if you want to save the trained model
-    save_path = {"gradient": None, "transformer": None} # Path to save the trained model
+    load_path = {"gradient": None, "transformer": "ercl_transformer_weights.npz"}  # Path to the pre-trained model if loading
+    do_train_model = {"gradient": False, "transformer": True}  # Set to True if you want to train the model
+    do_save_model = {"gradient": False, "transformer": True}  # Set to True if you want to save the trained model
+    save_path = {"gradient": None, "transformer": "ercl_transformer_weights_257.npz"} # Path to save the trained model
 
     module_run(model_requested, json_path, do_load_model, load_path, do_train_model, do_save_model, save_path)
 

@@ -9,6 +9,10 @@ import sys
 import csv
 import math
 
+import collections
+import collections.abc
+collections.Container = collections.abc.Container
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from linkage_deduplication.evaluation_models.fellegi_sunter import fellegi_sunter_probability as fs_prob
@@ -17,8 +21,8 @@ from linkage_deduplication.Subject import Subject
 from linkage_deduplication import ingest
 from linkage_deduplication.evaluation_models.gradient_model import GradientModel
 
-def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "transformer": None}, 
-        loadPath={"gradient": None, "transformer": None}, doTrainModel={"gradient": None, "transformer": None}, 
+def main(modelRequested="2", jsonPath="./dataset/train.json", doLoadModel={"gradient": None, "transformer": True}, 
+        loadPath={"gradient": None, "transformer": "./ercl_transfromer_weights.npz"}, doTrainModel={"gradient": None, "transformer": True}, 
         doSaveModel={"gradient": None, "transformer": None}, savePath={"gradient": None, "transformer": None}, trainParams={}):
     '''
     # Example subjects
@@ -79,9 +83,9 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
     results = []
     
     # Set CONSTANTS for the TransformerModel & GradientModel
-    EPOCHS_CONSTANT = trainParams.get("epochs", 10)  # Number of epochs for training the TransformerModel
-    LEARNING_RATE_CONSTANT = trainParams.get("lr", 1e-6)  # Learning rate for training the TransformerModel
-    RUN_ON = "cpu"  # Device to run the model on, change to "cuda" if you have a GPU available
+    EPOCHS_CONSTANT = trainParams.get("epochs", 300)  # Number of epochs for training the TransformerModel
+    LEARNING_RATE_CONSTANT = trainParams.get("lr", 1e-4)  # Learning rate for training the TransformerModel
+    RUN_ON = "cuda"  # Device to run the model on, change to "cuda" if you have a GPU available
 
     # Ask the user if they want to use the TransformerModel
     if modelRequested is not None:
@@ -165,6 +169,8 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
 
     elif model_requested == 2:
         model = TransformerModel()
+        model.to("cuda")
+        print("Model on:", next(model.parameters()).device)
 
         if doLoadModel.get("transformer") is not None:
             load_model = ('y' if doLoadModel.get("transformer") == True else 'n')
@@ -193,43 +199,16 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
             if doSaveModel.get("transformer") is not None:
                 save_model = ('y' if doSaveModel.get("transformer") == True else 'n')
             else:
-                save_model = input("Do you want to save the trained TransformerModel? (Y/N): ").strip().lower()
+                save_model = ("y").strip().lower()
 
             if save_model == 'y':
                 if savePath.get("transformer") is not None:
                     path = savePath.get("transformer")
                 else:
-                    path = input("Enter the path to save the TransformerModel: ").strip()
+                    path = "ercl_transformer_weights.npz"
 
                 model.save(path)
                 print(f"TransformerModel saved to {path}")
-
-        # Print loading message
-        print("Running Transformer Model...")
-
-        # Run through each pair of subjects in the dataset
-        for i, (subject1, subject2) in enumerate(subject_pairs):
-            # Calculate the transformer similarity score
-            transformer_score = math.floor(
-                model.transformer_similarity(subject1, subject2)*10000
-                ) / 10000.0  # Round to 4 decimal places
-
-            is_match = labels[i] == 1
-            base_id = subject2.attributes.get('base_id') if is_match else ""
-
-            # Append results to the list
-            results.append({
-                "Row": i + 1,
-                "Subject1_UUID": subject1.attributes.get('uuid'),
-                "Subject2_UUID": subject2.attributes.get('uuid'),
-                "Gradient_Boosted_Score": "",
-                "Transformer_Similarity_Score": transformer_score,
-                "Felligi_Sunter_Similarity_Score": "",
-                "Match": "Yes" if is_match else "No",
-                "Base_ID": base_id
-            })
-
-        to_csv(results)  # Save results to CSV
 
     elif model_requested == 3:
         # Print loading message

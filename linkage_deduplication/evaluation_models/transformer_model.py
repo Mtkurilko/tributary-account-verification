@@ -10,9 +10,32 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import collections
+import collections.abc
+collections.Container = collections.abc.Container
+from torch.utils.data import Dataset, DataLoader
+
+class PreEncodedDataset(Dataset):
+    def __init__(self, subject_pairs, labels, model):
+        self.model = model
+        self.inputs = []
+        self.labels = torch.tensor(labels, dtype=torch.float32)
+        for subj1, subj2 in subject_pairs:
+            arr1 = model._byte_encode(" ".join([str(getattr(subj1, f, "")) for f in model.feature_list]))
+            arr2 = model._byte_encode(" ".join([str(getattr(subj2, f, "")) for f in model.feature_list]))
+            self.inputs.append((arr1, arr2))
+
+    def __len__(self):
+        return len(self.inputs)
+
+    def __getitem__(self, idx):
+        return self.inputs[idx][0], self.inputs[idx][1], self.labels[idx]
+
+
 class TransformerModel(nn.Module):
-    def __init__(self, embedding_dim=16, vocab_size=256):
+    def __init__(self, embedding_dim=16, vocab_size=257):
         super().__init__()
+        self.feature_list = ['first_name', 'middle_name', 'last_name', 'dob', 'dod', 'email', 'phone_number', 'birth_city']
         self.embedding_dim = embedding_dim
         self.vocab_size = vocab_size
         self.embeddings = nn.Embedding(self.vocab_size, self.embedding_dim)
@@ -43,17 +66,20 @@ class TransformerModel(nn.Module):
         return self.ffn_w2(F.relu(self.ffn_w1(x)))
 
     def _transformer_encode(self, arr):
-        x = self._embed(arr)
-        x = self._self_attention(x)
-        x = self._ffn(x)
+        device = arr.device
+        x = self._embed(arr).to(device)
+        x = self._self_attention(x).to(device)
+        x = self._ffn(x).to(device)
         return x.mean(dim=0)
 
+
     def transformer_similarity(self, subject1, subject2):
-        features = ['first_name', 'middle_name', 'last_name', 'dob', 'dod', 'email', 'phone_number', 'birth_city']
-        s1 = " ".join([str(getattr(subject1, f, "")) for f in features])
-        s2 = " ".join([str(getattr(subject2, f, "")) for f in features])
-        arr1 = self._byte_encode(s1).to(self.embeddings.weight.device)
-        arr2 = self._byte_encode(s2).to(self.embeddings.weight.device)
+        s1 = " ".join([str(getattr(subject1, f, "")) for f in self.feature_list])
+        s2 = " ".join([str(getattr(subject2, f, "")) for f in self.feature_list])
+        if device is None:
+            device = self.embeddings.weight.device
+        arr1 = self._byte_encode(s1).to(device)
+        arr2 = self._byte_encode(s2).to(device)
         vec1 = self._transformer_encode(arr1)
         vec2 = self._transformer_encode(arr2)
         dot = (vec1 * vec2).sum()
@@ -62,10 +88,27 @@ class TransformerModel(nn.Module):
         similarity = dot / (norm1 * norm2 + 1e-8)
         return float(((similarity + 1) / 2).item())
 
+    def _transformer_encode_batch(self, arr_batch):
+        # arr_batch: (B, L)
+        x = self.embeddings(arr_batch)           # (B, L, D)
+        Q = self.attn_wq(x)
+        K = self.attn_wk(x)
+        V = self.attn_wv(x)
+        attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / (self.embedding_dim ** 0.5)
+        attn_weights = F.softmax(attn_scores, dim=-1)
+        x = torch.matmul(attn_weights, V)        # (B, L, D)
+        x = self.ffn_w2(F.relu(self.ffn_w1(x)))  # (B, L, D)
+        return x.mean(dim=1)                     # (B, D)
+
+    def forward(self, arr1, arr2):
+        vec1 = self._transformer_encode_batch(arr1)
+        vec2 = self._transformer_encode_batch(arr2)
+        return vec1, vec2
+
+
     def transformer_similarity_tensor(self, subject1, subject2):
-        features = ['first_name', 'middle_name', 'last_name', 'dob', 'dod', 'email', 'phone_number', 'birth_city']
-        s1 = " ".join([str(getattr(subject1, f, "")) for f in features])
-        s2 = " ".join([str(getattr(subject2, f, "")) for f in features])
+        s1 = " ".join([str(getattr(subject1, f, "")) for f in self.features_list])
+        s2 = " ".join([str(getattr(subject2, f, "")) for f in self.feature_list])
         arr1 = self._byte_encode(s1).to(self.embeddings.weight.device)
         arr2 = self._byte_encode(s2).to(self.embeddings.weight.device)
         vec1 = self._transformer_encode(arr1)
@@ -76,25 +119,46 @@ class TransformerModel(nn.Module):
         similarity = dot / (norm1 * norm2 + 1e-8)
         return (similarity + 1) / 2  # Tensor in [0,1]
 
-    def train_transformer(self, subject_pairs, labels, epochs=10, lr=1e-3, device="cuda"):
-        self.to(device)
+
+    def train_transformer(self, subject_pairs, labels, epochs=10, lr=1e-3, device="cuda", batch_size=200000):
+        use_multi_gpu = torch.cuda.device_count() > 1
+        dp_model = nn.DataParallel(self) if use_multi_gpu else self
+        dp_model.to(device)
         opt = torch.optim.Adam(self.parameters(), lr=lr)
         eps = 1e-7
+
+        dataset = PreEncodedDataset(subject_pairs, labels, self)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True, prefetch_factor=4)
+
+        print("Training with batch size:", batch_size)
+
         for epoch in range(epochs):
+            dp_model.train()
             total_loss = 0.0
-            for (subj1, subj2), label in zip(subject_pairs, labels):
-                pred = self.transformer_similarity_tensor(subj1, subj2)
-                pred = torch.clamp(pred, eps, 1 - eps)
-                target = torch.full(pred.shape, float(label), device=pred.device)
-                loss = -(target * torch.log(pred) + (1 - target) * torch.log(1 - pred)).mean()
+
+            for arr1_batch, arr2_batch, label_batch in loader:
+                arr1_batch = arr1_batch.to(device)
+                arr2_batch = arr2_batch.to(device)
+                label_batch = label_batch.unsqueeze(1).to(device)
+
+                vec1, vec2 = dp_model(arr1_batch, arr2_batch)
+
+                dot = (vec1 * vec2).sum(dim=1, keepdim=True)
+                norm1 = vec1.norm(dim=1, keepdim=True)
+                norm2 = vec2.norm(dim=1, keepdim=True)
+                similarity = dot / (norm1 * norm2 + 1e-8)
+                similarity = (similarity + 1) / 2
+                similarity = torch.clamp(similarity, eps, 1 - eps)
+
+                loss = -(label_batch * torch.log(similarity) + (1 - label_batch) * torch.log(1 - similarity)).mean()
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
-                total_loss += float(loss.item())
-                if torch.isnan(loss):
-                    print(f"NaN detected in loss! pred={pred.cpu().detach().numpy()}, target={target.cpu().detach().numpy()}")
-                    break
-            print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss/len(subject_pairs):.4f}")
+
+                total_loss += loss.item() * arr1_batch.size(0)
+
+            avg_loss = total_loss / len(dataset)
+            print(f"Epoch {epoch + 1}/{epochs}, Average Loss: {avg_loss:.4f}")
 
     def save(self, path):
         torch.save(self.state_dict(), path)

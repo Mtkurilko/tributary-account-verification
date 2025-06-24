@@ -8,3 +8,4 @@ __pycache__/
 uploaded*
 graph.html
 .env
+.venv/
