@@ -7,8 +7,7 @@ Description: This script runs the ingestion process that grabs data from the
 
 import json
 import multiprocessing as mp
-
-# from functools import partial
+from functools import partial
 
 from .Subject import Subject
 
@@ -24,56 +23,44 @@ def read_json(file_path):
         return json.load(file).get("nodes")
 
 
-def create_subject_chunk(data_chunk, start_idx):
-    """
-    Create Subject instances for a chunk of data.
-
-    :param data_chunk: Chunk of JSON data
-    :param start_idx: Starting index for the chunk
-    :return: List of Subject instances
-    """
-    subjects = []
-    for idx, item in enumerate(data_chunk):
-        uuid = item.get("node_id")
-        item = item.get("metadata", item)
-
-        subject = Subject(
-            first_name=item.get("first_name"),
-            middle_name=item.get("middle_name", None),
-            last_name=item.get("last_name"),
-            dob=item.get("date_of_birth", None),
-            dod=item.get("date_of_death", None),
-            email=item.get("email"),
-            phone_number=item.get("phone_number", None),
-            birth_city=item.get("birth_city", None),
-            attributes={"base_id": item.get("base_uuid", None), "uuid": uuid},
-        )
-        subjects.append((start_idx + idx, subject))
-    return subjects
+def _create_subject(item):
+    """Create a Subject instance from JSON data."""
+    uuid = item.get("node_id")
+    item = item.get("metadata", item)
+    return Subject(
+        first_name=item.get("first_name"),
+        middle_name=item.get("middle_name", None),
+        last_name=item.get("last_name"),
+        dob=item.get("date_of_birth", None),
+        dod=item.get("date_of_death", None),
+        email=item.get("email"),
+        phone_number=item.get("phone_number", None),
+        birth_city=item.get("birth_city", None),
+        attributes={"base_id": item.get("base_uuid", None), "uuid": uuid},
+    )
 
 
-def create_pair_chunk(subjects, chunk_range):
-    """
-    Create subject pairs for a specific range of indices
-
-    :param subjects: List of all subjects
-    :param chunk_range: Tuple of (start_i, end_i) for the outer loop
-    :return: List of (pair_index, subject_pair) tuples
-    """
-    pairs = []
-    n_subjects = len(subjects)
-    start_i, end_i = chunk_range
-
-    for i in range(start_i, min(end_i, n_subjects)):
-        for j in range(i + 1, n_subjects):
-            # calculate the pair index
-            pair_idx = sum(n_subjects - k - 1 for k in range(i)) + (j - i - 1)
-            pairs.append((pair_idx, (subjects[i], subjects[j])))
-
-    return pairs
+def _pair_indices(n):
+    """generator for i, j index pairs where i < j"""
+    for i in range(n):
+        for j in range(i + 1, n):
+            yield (i, j)
 
 
-def ingest_data(file_path, use_multiprocessing=True, num_workers=20):
+def _pair_from_indices(i, j, subjects):
+    """Create a pair from indices."""
+    return (subjects[i], subjects[j])
+
+
+def _label_pair(pair):
+    """Create label for a pair of subjects."""
+    subj1, subj2 = pair
+    base1 = subj1.attributes.get("base_id")
+    base2 = subj2.attributes.get("base_id")
+    return 1 if base1 is not None and base1 == base2 else 0
+
+
+def ingest_data(file_path, use_multiprocessing=True, num_workers=None):
     """
     Ingest data from a JSON file and create Subject instances.
 
@@ -85,7 +72,7 @@ def ingest_data(file_path, use_multiprocessing=True, num_workers=20):
     if not file_path.endswith(".json"):
         raise ValueError("File must be a JSON file.")
 
-    data = read_json(file_path)  # Read the JSON data from the file
+    data = read_json(file_path)
     n_subjects = len(data)
 
     # determine if multiprocessing should be used
@@ -95,7 +82,7 @@ def ingest_data(file_path, use_multiprocessing=True, num_workers=20):
 
     # auto-detect number of workers
     if num_workers is None:
-        num_workers = min(mp.cpu_count(), max(2, n_subjects // 1000))
+        num_workers = min(mp.cpu_count(), 20)
 
     print(f"using multiprocessing with {num_workers} workers for {n_subjects} subjects")
 
@@ -108,96 +95,44 @@ def ingest_data(file_path, use_multiprocessing=True, num_workers=20):
 
 def _ingest_data_sequential(data):
     """
-    Sequential version of data ingestion (original version)
+    Sequential version of data ingestion.
     """
     n_subjects = len(data)
     subjects = [None] * n_subjects  # pre-allocate with exact size
-    n_pairs = n_subjects * (n_subjects - 1) // 2
-    subject_pairs = [None] * n_pairs  # pre-allocate pairs list
 
     # Create subjects
     for idx, item in enumerate(data):
-        uuid = item.get("node_id")
-        item = item.get("metadata", item)
-
-        subjects[idx] = Subject(
-            first_name=item.get("first_name"),
-            middle_name=item.get("middle_name", None),
-            last_name=item.get("last_name"),
-            dob=item.get("date_of_birth", None),
-            dod=item.get("date_of_death", None),
-            email=item.get("email"),
-            phone_number=item.get("phone_number", None),
-            birth_city=item.get("birth_city", None),
-            attributes={"base_id": item.get("base_uuid", None), "uuid": uuid},
-        )
+        subjects[idx] = _create_subject(item)
 
     # Create pairs
-    pair_idx = 0
+    subject_pairs = []
     for i in range(n_subjects):
         for j in range(i + 1, n_subjects):
-            subject_pairs[pair_idx] = (subjects[i], subjects[j])
-            pair_idx += 1
+            subject_pairs.append((subjects[i], subjects[j]))
 
     return subjects, subject_pairs
 
 
 def _ingest_data_parallel(data, num_workers):
     """
-    Parallel version of data ingestion using multiprocessing.
+    Parallel ingestion
     """
-    n_subjects = len(data)
-    n_pairs = n_subjects * (n_subjects - 1) // 2
-
-    print("Creating subjects in parallel...")
-
-    # Step 1: Create subjects in parallel
-    chunk_size = max(1, n_subjects // num_workers)
-    subject_chunks = []
-
-    for i in range(0, n_subjects, chunk_size):
-        chunk = data[i : i + chunk_size]
-        subject_chunks.append((chunk, i))
-
+    # create subjects in parallel
     with mp.Pool(num_workers) as pool:
-        subject_results = pool.starmap(create_subject_chunk, subject_chunks)
+        subjects = pool.map(_create_subject, data)
 
-    # Flatten and sort results to maintain order
-    indexed_subjects = []
-    for chunk_result in subject_results:
-        indexed_subjects.extend(chunk_result)
-
-    indexed_subjects.sort(key=lambda x: x[0])  # Sort by index
-    subjects = [subject for _, subject in indexed_subjects]
-
-    print("Creating subject pairs in parallel...")
-
-    # Step 2: Create pairs in parallel
-    # Divide the work by splitting the outer loop iterations
-    pairs_per_worker = max(1, n_subjects // num_workers)
-    pair_chunks = []
-
-    for i in range(0, n_subjects, pairs_per_worker):
-        end_i = min(i + pairs_per_worker, n_subjects)
-        pair_chunks.append((subjects, (i, end_i)))
-
+    # create pairs in parallel
+    indices = list(_pair_indices(len(subjects)))
     with mp.Pool(num_workers) as pool:
-        pair_results = pool.starmap(create_pair_chunk, pair_chunks)
-
-    # flatten and sort
-    indexed_pairs = []
-    for chunk_result in pair_results:
-        indexed_pairs.extend(chunk_result)
-
-    indexed_pairs.sort(key=lambda x: x[0])  # Sort by pair index
-    subject_pairs = [pair for _, pair in indexed_pairs]
+        make_pair = partial(_pair_from_indices, subjects=subjects)
+        subject_pairs = pool.starmap(make_pair, indices)
 
     return subjects, subject_pairs
 
 
 def obtain_subject_labels(subject_pairs, use_multiprocessing=True, num_workers=None):
     """
-    Obtain labels for subject pairs based on user input.
+    Obtain labels for subject pairs.
 
     :param subject_pairs: List of tuples containing subject pairs.
     :param use_multiprocessing: Whether to use multiprocessing for label creation
@@ -209,55 +144,14 @@ def obtain_subject_labels(subject_pairs, use_multiprocessing=True, num_workers=N
     # Use multiprocessing for large datasets
     if use_multiprocessing and n_pairs > 10000:
         if num_workers is None:
-            num_workers = min(mp.cpu_count(), max(2, n_pairs // 5000))
+            num_workers = min(mp.cpu_count(), 20)
 
-        print(f"Creating labels in parallel with {num_workers} workers...")
+        print(f"creating labels in parallel with {num_workers} workers...")
 
         try:
-            chunk_size = max(1, n_pairs // num_workers)
-            chunks = [
-                subject_pairs[i : i + chunk_size] for i in range(0, n_pairs, chunk_size)
-            ]
-
             with mp.Pool(num_workers) as pool:
-                label_chunks = pool.map(_obtain_labels_chunk, chunks)
-
-            # Flatten results
-            labels = []
-            for chunk in label_chunks:
-                labels.extend(chunk)
-
-            return labels
-
+                return pool.map(_label_pair, subject_pairs)
         except Exception as e:
-            print(f"Parallel label creation failed ({e}), falling back to sequential")
+            print(f"parallel label creation failed ({e}), falling back to sequential")
 
-    # Sequential version (original optimized)
-    return [
-        (
-            1
-            if (
-                subj1.attributes.get("base_id") == subj2.attributes.get("base_id")
-                and subj1.attributes.get("base_id") is not None
-            )
-            else 0
-        )
-        for subj1, subj2 in subject_pairs
-    ]
-
-
-def _obtain_labels_chunk(subject_pairs_chunk):
-    """
-    Process a chunk of subject pairs to create labels.
-    """
-    return [
-        (
-            1
-            if (
-                subj1.attributes.get("base_id") == subj2.attributes.get("base_id")
-                and subj1.attributes.get("base_id") is not None
-            )
-            else 0
-        )
-        for subj1, subj2 in subject_pairs_chunk
-    ]
+    return [_label_pair(pair) for pair in subject_pairs]
