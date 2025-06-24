@@ -22,16 +22,20 @@ from torch.utils.data import Dataset, DataLoader
 # Only set if not already set to avoid conflicts
 try:
     if mp.get_start_method(allow_none=True) is None:
-        if sys.platform.startswith("linux") or sys.platform.startswith("darwin"):
-            mp.set_start_method("spawn", force=True)
-        elif sys.platform.startswith("win"):
-            mp.set_start_method("spawn", force=True)
+        if sys.platform.startswith('linux') or sys.platform.startswith('darwin'):
+            mp.set_start_method('spawn', force=True)
+        elif sys.platform.startswith('win'):
+            mp.set_start_method('spawn', force=True)
 except RuntimeError as e:
     print(f"Warning: Could not set multiprocessing start method: {e}")
 
 # Configure logging to work with multiprocessing
-logging.basicConfig(level=logging.INFO, format="%(processName)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format='%(processName)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Set environment variables to help with CUDA IPC issues
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'  # Synchronous CUDA execution for debugging
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'  # Limit memory split size
 
 
 class PreEncodedDataset(Dataset):
@@ -287,6 +291,19 @@ class TransformerModel(nn.Module):
 
         return self._compute_similarity(vec1, vec2)
 
+    def _reset_cuda_devices(self):
+        """Reset CUDA devices to recover from IPC errors"""
+        if torch.cuda.is_available():
+            print("Resetting CUDA devices...")
+            torch.cuda.empty_cache()
+            for i in range(torch.cuda.device_count()):
+                try:
+                    torch.cuda.set_device(i)
+                    torch.cuda.synchronize(i)
+                except Exception as e:
+                    print(f"Warning: Could not reset GPU {i}: {e}")
+            print("CUDA devices reset complete")
+
     def _monitor_gpu_utilization(self, epoch, batch_idx, num_batches):
         """Monitor and report GPU utilization"""
         if torch.cuda.is_available():
@@ -321,7 +338,8 @@ class TransformerModel(nn.Module):
             if num_gpus >= 4:  # Multi-GPU setup
                 batch_size = max(batch_size, 128)  # Larger batches for multi-GPU
                 if use_preencoded:
-                    batch_size = max(batch_size, 50000)  # Very large batches for pre-encoded data
+                    # More conservative batch size for Tesla K80s to avoid memory issues
+                    batch_size = max(batch_size, 10000)  # Reduced from 50000
             
             use_multi_gpu = num_gpus > 1
             if use_multi_gpu:
@@ -343,9 +361,9 @@ class TransformerModel(nn.Module):
         if use_preencoded and torch.cuda.is_available():
             print(f"Using pre-encoded dataset for maximum efficiency")
             dataset = PreEncodedDataset(subject_pairs, labels, self, debug_mode=debug_mode)
-            # Use fewer workers for pre-encoded data since it's already in memory
-            num_workers = min(4, mp.cpu_count())
-            prefetch_factor = 2
+            # Use single-threaded DataLoader for pre-encoded data to avoid CUDA IPC issues
+            num_workers = 0
+            prefetch_factor = None
         else:
             print(f"Using lazy dataset for memory efficiency")
             dataset = LazyDataset(
@@ -455,7 +473,24 @@ class TransformerModel(nn.Module):
 
             except Exception as e:
                 print(f"Error during training epoch {epoch+1}: {e}")
-                if num_workers > 0:
+                
+                # Check if it's a CUDA IPC error
+                if "CUDA error" in str(e) or "shared memory" in str(e) or "IPC" in str(e):
+                    print("Detected CUDA IPC/shared memory error. Attempting recovery...")
+                    self._reset_cuda_devices()
+                    
+                    # Recreate DataLoader without multiprocessing
+                    print("Recreating DataLoader without multiprocessing...")
+                    loader = DataLoader(
+                        dataset,
+                        batch_size=batch_size,
+                        shuffle=True,
+                        num_workers=0,
+                        pin_memory=False,
+                        drop_last=True,
+                    )
+                    continue
+                elif num_workers > 0:
                     print("Retrying with single-threaded DataLoader...")
                     # Recreate DataLoader without multiprocessing
                     loader = DataLoader(
@@ -468,10 +503,56 @@ class TransformerModel(nn.Module):
                     )
                     continue
                 else:
+                    print("Fatal error - cannot recover")
                     raise
 
             avg_loss = total_loss / len(dataset)
             print(f"Epoch {epoch+1}/{epochs}, Average Loss: {avg_loss:.4f}")
+
+    def train_transformer_old_style(self, subject_pairs, labels, epochs=10, lr=1e-3, device="cuda", batch_size=200000):
+        """
+        Fallback to old-style training approach for compatibility
+        """
+        print("Using old-style training approach for compatibility...")
+        
+        use_multi_gpu = torch.cuda.device_count() > 1
+        dp_model = nn.DataParallel(self) if use_multi_gpu else self
+        dp_model.to(device)
+        opt = torch.optim.Adam(self.parameters(), lr=lr)
+        eps = 1e-7
+
+        dataset = PreEncodedDataset(subject_pairs, labels, self)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
+
+        print("Training with batch size:", batch_size)
+
+        for epoch in range(epochs):
+            dp_model.train()
+            total_loss = 0.0
+
+            for arr1_batch, arr2_batch, label_batch in loader:
+                arr1_batch = arr1_batch.to(device)
+                arr2_batch = arr2_batch.to(device)
+                label_batch = label_batch.unsqueeze(1).to(device)
+
+                vec1, vec2 = dp_model(arr1_batch, arr2_batch)
+
+                dot = (vec1 * vec2).sum(dim=1, keepdim=True)
+                norm1 = vec1.norm(dim=1, keepdim=True)
+                norm2 = vec2.norm(dim=1, keepdim=True)
+                similarity = dot / (norm1 * norm2 + 1e-8)
+                similarity = (similarity + 1) / 2
+                similarity = torch.clamp(similarity, eps, 1 - eps)
+
+                loss = -(label_batch * torch.log(similarity) + (1 - label_batch) * torch.log(1 - similarity)).mean()
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+
+                total_loss += loss.item() * arr1_batch.size(0)
+
+            avg_loss = total_loss / len(dataset)
+            print(f"Epoch {epoch + 1}/{epochs}, Average Loss: {avg_loss:.4f}")
 
     def save(self, path):
         torch.save(self.state_dict(), path)

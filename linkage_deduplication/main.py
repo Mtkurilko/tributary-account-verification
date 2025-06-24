@@ -192,8 +192,14 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
             # Add debug mode option for transformer training
             debug_mode = input("Enable debug mode to see timing info? (Y/N): ").strip().lower() == 'y'
             use_preencoded = input("Use pre-encoded dataset for maximum efficiency? (Y/N): ").strip().lower() == 'y'
-            model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
-                                    lr=LEARNING_RATE_CONSTANT, device=RUN_ON, debug_mode=debug_mode, use_preencoded=use_preencoded)
+            use_old_style = input("Use old-style training approach (fallback for CUDA issues)? (Y/N): ").strip().lower() == 'y'
+            
+            if use_old_style:
+                model.train_transformer_old_style(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
+                                                lr=LEARNING_RATE_CONSTANT, device=RUN_ON)
+            else:
+                model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
+                                        lr=LEARNING_RATE_CONSTANT, device=RUN_ON, debug_mode=debug_mode, use_preencoded=use_preencoded)
 
             if doSaveModel.get("transformer") is not None:
                 save_model = ('y' if doSaveModel.get("transformer") == True else 'n')
@@ -310,10 +316,15 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
             # Add debug mode option for transformer training
             debug_mode = input("Enable debug mode to see timing info? (Y/N): ").strip().lower() == 'y'
             use_preencoded = input("Use pre-encoded dataset for maximum efficiency? (Y/N): ").strip().lower() == 'y'
+            use_old_style = input("Use old-style training approach (fallback for CUDA issues)? (Y/N): ").strip().lower() == 'y'
             
-            #Train the model with the subject pairs and labels
-            transformer_model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
-                                                lr=LEARNING_RATE_CONSTANT, device=RUN_ON, debug_mode=debug_mode, use_preencoded=use_preencoded)
+            if use_old_style:
+                transformer_model.train_transformer_old_style(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
+                                                            lr=LEARNING_RATE_CONSTANT, device=RUN_ON)
+            else:
+                #Train the model with the subject pairs and labels
+                transformer_model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
+                                                    lr=LEARNING_RATE_CONSTANT, device=RUN_ON, debug_mode=debug_mode, use_preencoded=use_preencoded)
 
             # Save the trained model (WHEN READY)
             if doSaveModel.get("transformer") is not None:
