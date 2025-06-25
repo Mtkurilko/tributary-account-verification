@@ -161,6 +161,7 @@ class TransformerModel(nn.Module):
         for epoch in range(epochs):
             dp_model.train()
             total_loss = 0.0
+            batch_count = 0
 
             for i, (arr1_batch, arr2_batch, label_batch) in enumerate(loader):
                 arr1_batch = arr1_batch.to(device)
@@ -185,11 +186,12 @@ class TransformerModel(nn.Module):
                 opt.step()
 
                 total_loss += loss.item() * arr1_batch.size(0)
+                batch_count += 1
 
                 if i % 100 == 0:  # Print progress periodically
                     print(f"  Batch {i}, Current Loss: {loss.item():.4f}")
 
-            avg_loss = total_loss / (i + 1)
+            avg_loss = total_loss / batch_count if batch_count > 0 else 0
             print(f"Epoch {epoch + 1}/{epochs}, Average Loss: {avg_loss:.4f}")
 
     def save(self, path):
