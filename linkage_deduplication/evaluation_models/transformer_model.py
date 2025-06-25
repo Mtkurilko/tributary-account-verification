@@ -1,42 +1,61 @@
-'''
+"""
 Author: Michael Kurilko
 Date: 6/3/2025 (Torch version 6/5/2025)
 Description: This module contains the TransformerModel class, which provides
 transformer-based similarity scorer using TORCH!
-'''
+"""
+
+import collections
+import collections.abc
+
+collections.Container = collections.abc.Container
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import collections
-import collections.abc
-collections.Container = collections.abc.Container
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, IterableDataset
 
-class PreEncodedDataset(Dataset):
+
+class PreEncodedDataset(IterableDataset):
     def __init__(self, subject_pairs, labels, model):
         self.model = model
-        self.subject_pairs = subject_pairs  # Store the raw subject pairs
-        self.labels = torch.tensor(labels, dtype=torch.float32)
+        self.subject_pairs = subject_pairs  # store the raw subject pairs
+        self.labels = labels
 
-    def __len__(self):
-        return len(self.subject_pairs)
+    def __iter__(self):
+        # create fresh iterators for each epoch
+        pairs_iter = iter(self.subject_pairs)
+        labels_iter = iter(self.labels)
 
-    def __getitem__(self, idx):
-        subj1, subj2 = self.subject_pairs[idx]
+        for pair, label in zip(pairs_iter, labels_iter):
+            subj1, subj2 = pair
 
-        # Encoding now happens here, for one pair at a time
-        arr1 = self.model._byte_encode(" ".join([str(getattr(subj1, f, "")) for f in self.model.feature_list]))
-        arr2 = self.model._byte_encode(" ".join([str(getattr(subj2, f, "")) for f in self.model.feature_list]))
+            # encoding happens here for one pair at a time
+            arr1 = self.model._byte_encode(
+                " ".join([str(getattr(subj1, f, "")) for f in self.model.feature_list])
+            )
+            arr2 = self.model._byte_encode(
+                " ".join([str(getattr(subj2, f, "")) for f in self.model.feature_list])
+            )
 
-        return arr1, arr2, self.labels[idx]
+            yield arr1, arr2, label
+
 
 class TransformerModel(nn.Module):
     def __init__(self, embedding_dim=16, vocab_size=257):
         super().__init__()
-        self.feature_list = ['first_name', 'middle_name', 'last_name', 'dob', 'dod', 'email', 'phone_number', 'birth_city']
+        self.feature_list = [
+            "first_name",
+            "middle_name",
+            "last_name",
+            "dob",
+            "dod",
+            "email",
+            "phone_number",
+            "birth_city",
+        ]
         self.embedding_dim = embedding_dim
         self.vocab_size = vocab_size
         self.embeddings = nn.Embedding(self.vocab_size, self.embedding_dim)
@@ -59,7 +78,7 @@ class TransformerModel(nn.Module):
         Q = self.attn_wq(x)
         K = self.attn_wk(x)
         V = self.attn_wv(x)
-        attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / (self.embedding_dim ** 0.5)
+        attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / (self.embedding_dim**0.5)
         attn_weights = F.softmax(attn_scores, dim=-1)
         return torch.matmul(attn_weights, V)
 
@@ -72,7 +91,6 @@ class TransformerModel(nn.Module):
         x = self._self_attention(x).to(device)
         x = self._ffn(x).to(device)
         return x.mean(dim=0)
-
 
     def transformer_similarity(self, subject1, subject2):
         s1 = " ".join([str(getattr(subject1, f, "")) for f in self.feature_list])
@@ -91,21 +109,20 @@ class TransformerModel(nn.Module):
 
     def _transformer_encode_batch(self, arr_batch):
         # arr_batch: (B, L)
-        x = self.embeddings(arr_batch)           # (B, L, D)
+        x = self.embeddings(arr_batch)  # (B, L, D)
         Q = self.attn_wq(x)
         K = self.attn_wk(x)
         V = self.attn_wv(x)
-        attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / (self.embedding_dim ** 0.5)
+        attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / (self.embedding_dim**0.5)
         attn_weights = F.softmax(attn_scores, dim=-1)
-        x = torch.matmul(attn_weights, V)        # (B, L, D)
+        x = torch.matmul(attn_weights, V)  # (B, L, D)
         x = self.ffn_w2(F.relu(self.ffn_w1(x)))  # (B, L, D)
-        return x.mean(dim=1)                     # (B, D)
+        return x.mean(dim=1)  # (B, D)
 
     def forward(self, arr1, arr2):
         vec1 = self._transformer_encode_batch(arr1)
         vec2 = self._transformer_encode_batch(arr2)
         return vec1, vec2
-
 
     def transformer_similarity_tensor(self, subject1, subject2):
         s1 = " ".join([str(getattr(subject1, f, "")) for f in self.features_list])
@@ -120,8 +137,9 @@ class TransformerModel(nn.Module):
         similarity = dot / (norm1 * norm2 + 1e-8)
         return (similarity + 1) / 2  # Tensor in [0,1]
 
-
-    def train_transformer(self, subject_pairs, labels, epochs=10, lr=1e-3, device="cuda", batch_size=10000):
+    def train_transformer(
+        self, subject_pairs, labels, epochs=10, lr=1e-3, device="cuda", batch_size=10000
+    ):
         use_multi_gpu = torch.cuda.device_count() > 1
         dp_model = nn.DataParallel(self) if use_multi_gpu else self
         dp_model.to(device)
@@ -129,7 +147,14 @@ class TransformerModel(nn.Module):
         eps = 1e-7
 
         dataset = PreEncodedDataset(subject_pairs, labels, self)
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True, prefetch_factor=10)
+        loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=16,
+            pin_memory=True,
+            prefetch_factor=10,
+        )
 
         print("Training with batch size:", batch_size)
 
@@ -151,14 +176,17 @@ class TransformerModel(nn.Module):
                 similarity = (similarity + 1) / 2
                 similarity = torch.clamp(similarity, eps, 1 - eps)
 
-                loss = -(label_batch * torch.log(similarity) + (1 - label_batch) * torch.log(1 - similarity)).mean()
+                loss = -(
+                    label_batch * torch.log(similarity)
+                    + (1 - label_batch) * torch.log(1 - similarity)
+                ).mean()
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
 
                 total_loss += loss.item() * arr1_batch.size(0)
 
-                if i % 100 == 0: # Print progress periodically
+                if i % 100 == 0:  # Print progress periodically
                     print(f"  Batch {i}/{len(loader)}, Current Loss: {loss.item():.4f}")
 
             avg_loss = total_loss / len(dataset)
@@ -170,12 +198,13 @@ class TransformerModel(nn.Module):
     def load(self, path, map_location=None):
         self.load_state_dict(torch.load(path, map_location=map_location or "cpu"))
 
+
 # Example usage:
 # model = TransformerModel()
 # gb_score = model.gradient_boosted_score(subject1, subject2)
 # transformer_score = model.transformer_similarity(subject1, subject2)
 
-'''
+"""
 # Train your model
 model = TransformerModel()
 model.train_transformer(subject_pairs, labels, epochs=20, lr=1e-3, device="cuda" if torch.cuda.is_available() else "cpu")
@@ -191,4 +220,4 @@ model.load("transformer_weights.npz")
 # Now you can use the trained model for inference
 score = model.transformer_similarity(subject1, subject2)
 print("Similarity score:", score)
-'''
+"""
