@@ -187,9 +187,9 @@ class TransformerModel(nn.Module):
                 total_loss += loss.item() * arr1_batch.size(0)
 
                 if i % 100 == 0:  # Print progress periodically
-                    print(f"  Batch {i}/{len(loader)}, Current Loss: {loss.item():.4f}")
+                    print(f"  Batch {i}, Current Loss: {loss.item():.4f}")
 
-            avg_loss = total_loss / len(dataset)
+            avg_loss = total_loss / (i + 1)
             print(f"Epoch {epoch + 1}/{epochs}, Average Loss: {avg_loss:.4f}")
 
     def save(self, path):
