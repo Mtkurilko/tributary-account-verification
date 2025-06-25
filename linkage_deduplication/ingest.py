@@ -7,7 +7,8 @@ Description: This script runs the ingestion process that grabs data from the
 
 import json
 import multiprocessing as mp
-from functools import partial
+
+# from functools import partial
 
 from .Subject import Subject
 
@@ -47,8 +48,16 @@ def _pair_indices(n):
             yield (i, j)
 
 
+def _pair_generator(subjects):
+    """yield pairs of subjects without storing in mem"""
+    n_subjects = len(subjects)
+    for i in range(n_subjects):
+        for j in range(i + 1, n_subjects):
+            yield (subjects[i], subjects[j])
+
+
 def _pair_from_indices(i, j, subjects):
-    """Create a pair from indices."""
+    """create a pair from indices."""
     return (subjects[i], subjects[j])
 
 
@@ -105,12 +114,15 @@ def _ingest_data_sequential(data):
         subjects[idx] = _create_subject(item)
 
     # Create pairs
-    subject_pairs = []
-    for i in range(n_subjects):
-        for j in range(i + 1, n_subjects):
-            subject_pairs.append((subjects[i], subjects[j]))
+    # subject_pairs = []
+    # for i in range(n_subjects):
+    #     for j in range(i + 1, n_subjects):
+    #         subject_pairs.append((subjects[i], subjects[j]))
 
-    return subjects, subject_pairs
+    # return subjects, subject_pairs
+
+    # Return subjects and a generator for pairs instead of creating all pairs
+    return subjects, _pair_generator(subjects)
 
 
 def _ingest_data_parallel(data, num_workers):
@@ -122,23 +134,35 @@ def _ingest_data_parallel(data, num_workers):
         subjects = pool.map(_create_subject, data)
 
     # create pairs in parallel
-    indices = list(_pair_indices(len(subjects)))
-    with mp.Pool(num_workers) as pool:
-        make_pair = partial(_pair_from_indices, subjects=subjects)
-        subject_pairs = pool.starmap(make_pair, indices)
+    # indices = list(_pair_indices(len(subjects)))
+    # with mp.Pool(num_workers) as pool:
+    #     make_pair = partial(_pair_from_indices, subjects=subjects)
+    #     subject_pairs = pool.starmap(make_pair, indices)
 
-    return subjects, subject_pairs
+    # return subjects, subject_pairs
+
+    # Return subjects and a generator for pairs instead of creating all pairs
+    return subjects, _pair_generator(subjects)
 
 
 def obtain_subject_labels(subject_pairs, use_multiprocessing=True, num_workers=None):
     """
     Obtain labels for subject pairs.
 
-    :param subject_pairs: List of tuples containing subject pairs.
-    :param use_multiprocessing: Whether to use multiprocessing for label creation
-    :param num_workers: Number of worker processes (None for auto-detection)
-    :return: List of labels (1 for match, 0 for non-match).
+    :param subject_pairs: generator or list of tuples containing subject pairs.
+    :param use_multiprocessing: whether to use multiprocessing for label creation
+    :param num_workers: number of worker processes (not used with generators)
+    :return: generator that yields labels (1 for match, 0 for non-match).
     """
+    if hasattr(subject_pairs, "__iter__") and not isinstance(subject_pairs, list):
+
+        def label_generator():
+            for pair in subject_pairs:
+                yield _label_pair(pair)
+
+        return label_generator()
+
+    # If it's a list, use the original logic
     n_pairs = len(subject_pairs)
 
     # Use multiprocessing for large datasets
