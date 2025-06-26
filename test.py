@@ -9,7 +9,7 @@ def main():
     # Example usage of the module_run function
     model_requested = 2  # Choose the model to run
     json_path = "dataset/dataset.json"  # Path to your JSON data file
-    do_load_model = {"gradient": False, "transformer": False}  # Set to True if you want to load a pre-trained model
+    do_load_model = {"gradient": False, "transformer": True}  # Set to True if you want to load a pre-trained model
     load_path = {"gradient": None, "transformer": "pretrained_weights/Avant-0.0.1.npz"}  # Path to the pre-trained model if loading
     do_train_model = {"gradient": False, "transformer": True}  # Set to True if you want to train the model
     do_save_model = {"gradient": False, "transformer": True}  # Set to True if you want to save the trained model

@@ -102,6 +102,16 @@ def ingest_data(file_path, use_multiprocessing=True, num_workers=None):
         return _ingest_data_sequential(data)
 
 
+def get_len_data(file_path):
+    if not file_path.endswith(".json"):
+        raise ValueError("File must be a JSON file.")
+
+    data = read_json(file_path)
+    n_subjects = len(data)
+
+    return n_subjects
+
+
 def _ingest_data_sequential(data):
     """
     Sequential version of data ingestion.

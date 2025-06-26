@@ -78,6 +78,8 @@ def main(modelRequested="2", jsonPath="./dataset/train.json", doLoadModel={"grad
     subjects, subject_pairs  = ingest.ingest_data(path)  # Load subjects and pairs from dataset
 
     labels = ingest.obtain_subject_labels(subject_pairs)  # Obtain labels for the subject pairs
+
+    n_subjects = ingest.get_len_data(path)
     
     # Initialize results list to store output
     results = []
@@ -194,7 +196,7 @@ def main(modelRequested="2", jsonPath="./dataset/train.json", doLoadModel={"grad
 
         if train_model == 'y':
             model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
-                                    lr=LEARNING_RATE_CONSTANT, device=RUN_ON)
+                                    lr=LEARNING_RATE_CONSTANT, device=RUN_ON, max_samples=(n_subjects * (n_subjects - 1) // 2))
 
             if doSaveModel.get("transformer") is not None:
                 save_model = ('y' if doSaveModel.get("transformer") == True else 'n')

@@ -7,6 +7,7 @@ transformer-based similarity scorer using TORCH!
 
 import collections
 import collections.abc
+import math
 
 collections.Container = collections.abc.Container
 
@@ -15,33 +16,33 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from itertools import islice
 from torch.utils.data import Dataset, DataLoader, IterableDataset
 
 
 class PreEncodedDataset(IterableDataset):
-    def __init__(self, subject_pairs, labels, model):
+    def __init__(self, subject_pairs, labels, model, max_samples=None):
         self.model = model
         self.subject_pairs = subject_pairs  # store the raw subject pairs
         self.labels = labels
+        self.max_samples = max_samples
 
     def __iter__(self):
         # create fresh iterators for each epoch
         pairs_iter = iter(self.subject_pairs)
         labels_iter = iter(self.labels)
-
-        for pair, label in zip(pairs_iter, labels_iter):
-            subj1, subj2 = pair
-
-            # encoding happens here for one pair at a time
-            arr1 = self.model._byte_encode(
-                " ".join([str(getattr(subj1, f, "")) for f in self.model.feature_list])
+        
+        generator = (
+            (
+                self.model._byte_encode(" ".join(str(getattr(subj1, f, "")) for f in self.model.feature_list)),
+                self.model._byte_encode(" ".join(str(getattr(subj2, f, "")) for f in self.model.feature_list)),
+                label
             )
-            arr2 = self.model._byte_encode(
-                " ".join([str(getattr(subj2, f, "")) for f in self.model.feature_list])
-            )
+            for idx, ((subj1, subj2), label) in enumerate(zip(pairs_iter, labels_iter))
+            if self.max_samples is None or idx < self.max_samples
+        )
 
-            yield arr1, arr2, label
-
+        return islice(generator, self.max_samples) if self.max_samples else generator
 
 class TransformerModel(nn.Module):
     def __init__(self, embedding_dim=16, vocab_size=257):
@@ -138,7 +139,7 @@ class TransformerModel(nn.Module):
         return (similarity + 1) / 2  # Tensor in [0,1]
 
     def train_transformer(
-        self, subject_pairs, labels, epochs=10, lr=1e-3, device="cuda", batch_size=10000
+        self, subject_pairs, labels, epochs=10, lr=1e-3, device="cuda", batch_size=10000, max_samples=10000
     ):
         use_multi_gpu = torch.cuda.device_count() > 1
         dp_model = nn.DataParallel(self) if use_multi_gpu else self
@@ -146,7 +147,7 @@ class TransformerModel(nn.Module):
         opt = torch.optim.Adam(self.parameters(), lr=lr)
         eps = 1e-7
 
-        dataset = PreEncodedDataset(subject_pairs, labels, self)
+        dataset = PreEncodedDataset(subject_pairs, labels, self, max_samples=max_samples)
         loader = DataLoader(
             dataset,
             batch_size=batch_size,
@@ -187,10 +188,15 @@ class TransformerModel(nn.Module):
 
                 total_loss += loss.item() * arr1_batch.size(0)
                 batch_count += 1
-
+                
                 if i % 100 == 0:  # Print progress periodically
-                    print(f"  Batch {i}, Current Loss: {loss.item():.4f}")
-
+                    expected_batches = math.ceil(max_samples / batch_size)
+                    print(f"  Batch {i}/{expected_batches}, Current Loss: {loss.item():.4f}")
+                
+                if batch_count >= math.ceil(max_samples / batch_size):
+                    print("🔴 Hit max_batches limit, breaking early")
+                    break
+                
             avg_loss = total_loss / batch_count if batch_count > 0 else 0
             print(f"Epoch {epoch + 1}/{epochs}, Average Loss: {avg_loss:.4f}")
 
