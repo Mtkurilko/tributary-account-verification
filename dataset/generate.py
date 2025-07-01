@@ -22,6 +22,8 @@ import uuid
 import random
 import argparse
 
+from data import *
+
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -30,7 +32,6 @@ from db.gdb import GraphDatabase
 
 from faker import Faker
 
-from dataset.data import *
 
 class Generator:
     """
@@ -394,6 +395,30 @@ class FamilyGenerator:
         self.families = {}  # family_id -> list of people
         self.family_trees = {}  # family_id -> tree structure
 
+    def _get_birth_year(self, person_data: Dict[str, Any]) -> int:
+        """extract birth year from person data"""
+        return int(person_data["date_of_birth"][:4])
+
+    def _create_family_connection(
+        self,
+        uid1: str,
+        uid2: str,
+        relationship: str,
+        family_id: str,
+        directed: bool = False,
+    ) -> Dict[str, Any]:
+        """create a family connection with consistent structure"""
+        return {
+            "source": uid1,
+            "target": uid2,
+            "directed": directed,
+            "metadata": {
+                "type": "family",
+                "relationship": relationship,
+                "family_id": family_id,
+            },
+        }
+
     def create_family_structures(self) -> Dict[str, List[Tuple[str, Dict[str, Any]]]]:
         """organize people into realistic family units"""
         # group by last name as starting point
@@ -411,118 +436,143 @@ class FamilyGenerator:
             # sort by birth date to establish generations
             people_with_name.sort(key=lambda x: x[1]["date_of_birth"])
 
-            # group into generations (20+ year gaps indicate new generation)
-            generations = []
-            current_gen = [people_with_name[0]]
-
-            for person in people_with_name[1:]:
-                birth_year = int(person[1]["date_of_birth"][:4])
-                last_birth_year = int(current_gen[-1][1]["date_of_birth"][:4])
-
-                if birth_year - last_birth_year > 20:
-                    generations.append(current_gen)
-                    current_gen = [person]
-                else:
-                    current_gen.append(person)
-
-            if current_gen:
-                generations.append(current_gen)
+            # group into generations
+            generations = self._group_into_generations(people_with_name)
 
             # create family tree structure
             if len(generations) >= 2:
-                self.families[f"family_{family_id}"] = people_with_name
-                self.family_trees[f"family_{family_id}"] = generations
+                family_key = f"family_{family_id}"
+                self.families[family_key] = people_with_name
+                self.family_trees[family_key] = generations
                 family_id += 1
 
         return self.families
+
+    def _group_into_generations(
+        self, people: List[Tuple[str, Dict[str, Any]]]
+    ) -> List[List]:
+        """group people into generations based on age gaps"""
+        generations = []
+        current_gen = [people[0]]
+
+        for person in people[1:]:
+            birth_year = self._get_birth_year(person[1])
+            last_birth_year = self._get_birth_year(current_gen[-1][1])
+
+            if birth_year - last_birth_year > GENERATION_AGE_GAP:
+                generations.append(current_gen)
+                current_gen = [person]
+            else:
+                current_gen.append(person)
+
+        if current_gen:
+            generations.append(current_gen)
+
+        return generations
 
     def generate_family_connections(self, target_count: int) -> List[Dict[str, Any]]:
         """generate realistic family relationships"""
         connections = []
 
         for family_id, generations in self.family_trees.items():
-            family_connections = []
+            # parent-child relationships
+            connections.extend(
+                self._generate_parent_child_connections(family_id, generations)
+            )
 
-            # parent-child relationships between consecutive generations
-            for i in range(len(generations) - 1):
-                parents = generations[i]
-                children = generations[i + 1]
+            # sibling relationships
+            connections.extend(
+                self._generate_sibling_connections(family_id, generations)
+            )
 
-                # create parent-child connections
-                for parent_uid, parent_data in parents:
-                    for child_uid, child_data in children:
-                        # check age difference is realistic for parent-child (15-50 years)
-                        parent_birth = int(parent_data["date_of_birth"][:4])
-                        child_birth = int(child_data["date_of_birth"][:4])
-                        age_diff = child_birth - parent_birth
-
-                        if 15 <= age_diff <= 50:
-                            family_connections.append(
-                                {
-                                    "source": parent_uid,
-                                    "target": child_uid,
-                                    "directed": True,
-                                    "metadata": {
-                                        "type": "family",
-                                        "relationship": "parent_child",
-                                        "family_id": family_id,
-                                    },
-                                }
-                            )
-
-            # sibling relationships within same generation
-            for generation in generations:
-                if len(generation) > 1:
-                    for i, (uid1, data1) in enumerate(generation):
-                        for uid2, data2 in generation[i + 1 :]:
-                            # siblings should be born within 15 years of each other
-                            birth1 = int(data1["date_of_birth"][:4])
-                            birth2 = int(data2["date_of_birth"][:4])
-
-                            if abs(birth1 - birth2) <= 15:
-                                family_connections.append(
-                                    {
-                                        "source": uid1,
-                                        "target": uid2,
-                                        "directed": False,
-                                        "metadata": {
-                                            "type": "family",
-                                            "relationship": "sibling",
-                                            "family_id": family_id,
-                                        },
-                                    }
-                                )
-
-            # spouse relationships (different last names, similar ages)
-            for person_uid, person_data in self.people:
-                if person_data["last_name"] == family_id.split("_")[1]:
-                    continue
-
-                # find potential spouses in this family
-                for family_person_uid, family_person_data in self.families.get(
-                    family_id, []
-                ):
-                    person_birth = int(person_data["date_of_birth"][:4])
-                    family_birth = int(family_person_data["date_of_birth"][:4])
-
-                    # spouses typically within 10 years age difference
-                    if abs(person_birth - family_birth) <= 10 and random.random() < 0.1:
-                        family_connections.append(
-                            {
-                                "source": person_uid,
-                                "target": family_person_uid,
-                                "directed": False,
-                                "metadata": {
-                                    "type": "family",
-                                    "relationship": "spouse",
-                                    "family_id": family_id,
-                                },
-                            }
-                        )
-
-            connections.extend(family_connections)
+            # spouse relationships
+            connections.extend(self._generate_spouse_connections(family_id))
 
         return connections[:target_count]
+
+    def _generate_parent_child_connections(
+        self, family_id: str, generations: List[List]
+    ) -> List[Dict[str, Any]]:
+        """generate parent-child relationships between consecutive generations"""
+        connections = []
+
+        for i in range(len(generations) - 1):
+            parents = generations[i]
+            children = generations[i + 1]
+
+            for parent_uid, parent_data in parents:
+                for child_uid, child_data in children:
+                    parent_birth = self._get_birth_year(parent_data)
+                    child_birth = self._get_birth_year(child_data)
+                    age_diff = child_birth - parent_birth
+
+                    if (
+                        PARENT_CHILD_MIN_AGE_DIFF
+                        <= age_diff
+                        <= PARENT_CHILD_MAX_AGE_DIFF
+                    ):
+                        connections.append(
+                            self._create_family_connection(
+                                parent_uid,
+                                child_uid,
+                                "parent_child",
+                                family_id,
+                                directed=True,
+                            )
+                        )
+
+        return connections
+
+    def _generate_sibling_connections(
+        self, family_id: str, generations: List[List]
+    ) -> List[Dict[str, Any]]:
+        """generate sibling relationships within same generation"""
+        connections = []
+
+        for generation in generations:
+            if len(generation) > 1:
+                for i, (uid1, data1) in enumerate(generation):
+                    for uid2, data2 in generation[i + 1 :]:
+                        birth1 = self._get_birth_year(data1)
+                        birth2 = self._get_birth_year(data2)
+
+                        if abs(birth1 - birth2) <= SIBLING_MAX_AGE_DIFF:
+                            connections.append(
+                                self._create_family_connection(
+                                    uid1, uid2, "sibling", family_id
+                                )
+                            )
+
+        return connections
+
+    def _generate_spouse_connections(self, family_id: str) -> List[Dict[str, Any]]:
+        """generate spouse relationships (different last names, similar ages)"""
+        connections = []
+
+        # this is a simplified version - could be more sophisticated
+        for person_uid, person_data in self.people:
+            if person_data["last_name"] == family_id.split("_")[1]:
+                continue
+
+            # find potential spouses in this family
+            for family_person_uid, family_person_data in self.families.get(
+                family_id, []
+            ):
+                person_birth = self._get_birth_year(person_data)
+                family_birth = self._get_birth_year(family_person_data)
+
+                # spouses typically within age difference limit
+                if (
+                    abs(person_birth - family_birth) <= SPOUSE_MAX_AGE_DIFF
+                    and random.random() < SPOUSE_CONNECTION_CHANCE
+                ):
+                    connections.append(
+                        self._create_family_connection(
+                            person_uid, family_person_uid, "spouse", family_id
+                        )
+                    )
+
+        return connections
 
 
 class ConnectionGenerator:
@@ -532,19 +582,295 @@ class ConnectionGenerator:
         self.people = people
         self.family_gen = FamilyGenerator(people)
 
-    def generate_connections(self, num_edges: int) -> List[Dict[str, Any]]:
-        """generate connections with realistic family structures"""
+        # organize people by demographic clusters for realistic connections
+        self.city_clusters = self._create_city_clusters()
+        self.age_clusters = self._create_age_clusters()
+        self.email_clusters = self._create_email_clusters()
+
+        # degree tracking for preferential attachment
+        self.node_degrees = {uid: 0 for uid, _ in people}
+
+    def _create_city_clusters(self) -> Dict[str, List[Tuple[str, Dict[str, Any]]]]:
+        """group people by birth city for geographic clustering"""
+        clusters = {}
+        for uid, metadata in self.people:
+            city = metadata.get("birth_city", "unknown")
+            clusters.setdefault(city, []).append((uid, metadata))
+        return clusters
+
+    def _create_age_clusters(self) -> Dict[str, List[Tuple[str, Dict[str, Any]]]]:
+        """group people by birth decade for age-based clustering"""
+        clusters = {}
+        for uid, metadata in self.people:
+            birth_year = int(metadata["date_of_birth"][:4])
+            decade = f"{birth_year // 10 * 10}s"
+            clusters.setdefault(decade, []).append((uid, metadata))
+        return clusters
+
+    def _create_email_clusters(self) -> Dict[str, List[Tuple[str, Dict[str, Any]]]]:
+        """group people by email domain for workplace/school clustering"""
+        clusters = {}
+        for uid, metadata in self.people:
+            domain = metadata["email"].split("@")[1]
+            clusters.setdefault(domain, []).append((uid, metadata))
+        return clusters
+
+    def _weighted_random_choice(
+        self, items_with_weights: Dict[str, float]
+    ) -> Optional[str]:
+        """select item based on weights, return None if no items"""
+        if not items_with_weights:
+            return None
+
+        total_weight = sum(items_with_weights.values())
+        if total_weight <= 0:
+            return random.choice(list(items_with_weights.keys()))
+
+        r = random.uniform(0, total_weight)
+        cumulative = 0
+
+        for item, weight in items_with_weights.items():
+            cumulative += weight
+            if r <= cumulative:
+                return item
+
+        return list(items_with_weights.keys())[-1]  # fallback
+
+    def _create_connection(
+        self,
+        person1_uid: str,
+        person2_uid: str,
+        conn_type: str,
+        relationship: str,
+        **extra_metadata,
+    ) -> Dict[str, Any]:
+        """create a connection dict with consistent structure"""
+        metadata = {"type": conn_type, "relationship": relationship}
+        metadata.update(extra_metadata)
+
+        return {
+            "source": person1_uid,
+            "target": person2_uid,
+            "directed": False,
+            "metadata": metadata,
+        }
+
+    def _generate_cluster_connections(
+        self,
+        count: int,
+        clusters: Dict[str, List],
+        conn_type: str,
+        relationship: str,
+        weight_func=None,
+        **extra_metadata_func,
+    ) -> List[Dict[str, Any]]:
+        """generic method to generate connections within clusters"""
         connections = []
 
-        # create family structures
+        for _ in range(count):
+            # filter clusters with at least 2 people
+            valid_clusters = {
+                key: people for key, people in clusters.items() if len(people) >= 2
+            }
+            if not valid_clusters:
+                break
+
+            # calculate weights for cluster selection
+            if weight_func:
+                cluster_weights = {
+                    key: weight_func(key, people)
+                    for key, people in valid_clusters.items()
+                }
+            else:
+                cluster_weights = {
+                    key: len(people) for key, people in valid_clusters.items()
+                }
+
+            # select cluster
+            selected_cluster = self._weighted_random_choice(cluster_weights)
+            if not selected_cluster:
+                continue
+
+            # select two people from cluster
+            people_in_cluster = valid_clusters[selected_cluster]
+            person1 = random.choice(people_in_cluster)
+            person2 = self._select_with_preferential_attachment(
+                people_in_cluster, person1[0]
+            )
+
+            if person2 and person1[0] != person2[0]:
+                # build extra metadata
+                extra_metadata = {}
+                if extra_metadata_func:
+                    for key, func in extra_metadata_func.items():
+                        extra_metadata[key] = func(selected_cluster, person1, person2)
+
+                connections.append(
+                    self._create_connection(
+                        person1[0],
+                        person2[0],
+                        conn_type,
+                        relationship,
+                        **extra_metadata,
+                    )
+                )
+
+        return connections
+
+    def _select_with_preferential_attachment(
+        self, candidates: List[Tuple[str, Dict[str, Any]]], exclude_uid: str = None
+    ) -> Optional[Tuple[str, Dict[str, Any]]]:
+        """select a person with preferential attachment (popular nodes more likely)"""
+        if not candidates:
+            return None
+
+        # filter out excluded person
+        if exclude_uid:
+            candidates = [(uid, data) for uid, data in candidates if uid != exclude_uid]
+
+        if not candidates:
+            return None
+
+        # simple weighted selection based on degree
+        weights = {uid: self.node_degrees.get(uid, 0) + 1 for uid, _ in candidates}
+        selected_uid = self._weighted_random_choice(weights)
+
+        # return the full tuple for the selected uid
+        for uid, data in candidates:
+            if uid == selected_uid:
+                return (uid, data)
+
+        return candidates[0]  # fallback
+
+    def _generate_geographic_connections(self, count: int) -> List[Dict[str, Any]]:
+        """generate connections between people in same cities"""
+        return self._generate_cluster_connections(
+            count=count,
+            clusters=self.city_clusters,
+            conn_type="geographic",
+            relationship="neighbor",
+            city=lambda cluster_key, p1, p2: cluster_key,
+        )
+
+    def _generate_age_cohort_connections(self, count: int) -> List[Dict[str, Any]]:
+        """generate connections between people of similar ages"""
+        return self._generate_cluster_connections(
+            count=count,
+            clusters=self.age_clusters,
+            conn_type="age_cohort",
+            relationship="peer",
+            decade=lambda cluster_key, p1, p2: cluster_key,
+        )
+
+    def _generate_email_domain_connections(self, count: int) -> List[Dict[str, Any]]:
+        """generate connections between people with same email domain (workplace/school)"""
+        connections = []
+
+        for _ in range(count):
+            # filter domains with at least 2 people
+            valid_domains = {
+                domain: people
+                for domain, people in self.email_clusters.items()
+                if len(people) >= 2
+            }
+            if not valid_domains:
+                break
+
+            # calculate domain weights
+            domain_weights = {}
+            for domain, people in valid_domains.items():
+                base_weight = len(people)
+                domain_weights[domain] = base_weight * (
+                    CONSUMER_EMAIL_WEIGHT
+                    if domain in CONSUMER_EMAIL_DOMAINS
+                    else WORKPLACE_EMAIL_WEIGHT
+                )
+
+            # select domain
+            selected_domain = self._weighted_random_choice(domain_weights)
+            if not selected_domain:
+                continue
+
+            # select two people from domain
+            people_in_domain = valid_domains[selected_domain]
+            person1 = random.choice(people_in_domain)
+            person2 = self._select_with_preferential_attachment(
+                people_in_domain, person1[0]
+            )
+
+            if person2 and person1[0] != person2[0]:
+                relationship = (
+                    "colleague"
+                    if selected_domain not in CONSUMER_EMAIL_DOMAINS
+                    else "acquaintance"
+                )
+                connections.append(
+                    self._create_connection(
+                        person1[0],
+                        person2[0],
+                        "workplace",
+                        relationship,
+                        domain=selected_domain,
+                    )
+                )
+
+        return connections
+
+    def _generate_small_world_connections(self, count: int) -> List[Dict[str, Any]]:
+        """generate random long-distance connections for small-world property"""
+        connections = []
+
+        for _ in range(count):
+            if len(self.people) < 2:
+                break
+
+            person1, person2 = random.sample(self.people, 2)
+            connections.append(
+                self._create_connection(
+                    person1[0], person2[0], "small_world", "distant_acquaintance"
+                )
+            )
+            # small world connections can be directed
+            connections[-1]["directed"] = random.choice([True, False])
+
+        return connections
+
+    def generate_connections(self, num_edges: int) -> List[Dict[str, Any]]:
+        """generate connections with realistic social network patterns"""
+        connections = []
+
+        # create family structures first
         print("  organizing family structures")
         families = self.family_gen.create_family_structures()
         print(f"  created {len(families)} family units")
 
-        # connection types with distribution ratios
+        # connection types with realistic distribution
         connection_types = [
-            ("family", self.family_gen.generate_family_connections, 0.4),
-            ("random", self._generate_random_connections, 0.6),
+            (
+                "family",
+                self.family_gen.generate_family_connections,
+                CONNECTION_TYPE_RATIOS["family"],
+            ),
+            (
+                "geographic",
+                self._generate_geographic_connections,
+                CONNECTION_TYPE_RATIOS["geographic"],
+            ),
+            (
+                "age_cohort",
+                self._generate_age_cohort_connections,
+                CONNECTION_TYPE_RATIOS["age_cohort"],
+            ),
+            (
+                "workplace",
+                self._generate_email_domain_connections,
+                CONNECTION_TYPE_RATIOS["workplace"],
+            ),
+            (
+                "small_world",
+                self._generate_small_world_connections,
+                CONNECTION_TYPE_RATIOS["small_world"],
+            ),
         ]
 
         # distribute edges across connection types
@@ -556,10 +882,10 @@ class ConnectionGenerator:
                 edges_count = int(num_edges * ratio)
                 remaining_edges -= edges_count
 
-            new_connections = generator(edges_count)
-            connections.extend(new_connections)
-
-            print(f"  generated {len(new_connections)} {conn_type} connections")
+            if edges_count > 0:
+                new_connections = generator(edges_count)
+                connections.extend(new_connections)
+                print(f"  generated {len(new_connections)} {conn_type} connections")
 
         # remove duplicates and self-loops
         return self._deduplicate_connections(connections, num_edges)
@@ -583,28 +909,11 @@ class ConnectionGenerator:
                 seen.add(key)
                 unique_connections.append(conn)
 
+                # update degree counts for preferential attachment
+                self.node_degrees[conn["source"]] += 1
+                self.node_degrees[conn["target"]] += 1
+
         return unique_connections[:max_count]
-
-    def _generate_random_connections(self, count: int) -> List[Dict[str, Any]]:
-        """generate random connections between people"""
-        connections = []
-
-        for _ in range(count):
-            if len(self.people) < 2:
-                break
-
-            person1, person2 = random.sample(self.people, 2)
-
-            connections.append(
-                {
-                    "source": person1[0],
-                    "target": person2[0],
-                    "directed": random.choice([True, False]),
-                    "metadata": {"type": "random", "relationship": "acquaintance"},
-                }
-            )
-
-        return connections
 
 
 def generate_dataset(
@@ -796,8 +1105,9 @@ def main() -> None:
         args.num_people, args.num_edges, args.output, args.duplicate_likelihood
     )
 
+
 # Michael: This function allows running this script outside the terminal
-# and is useful for programmatically generating datasets or 
+# and is useful for programmatically generating datasets or
 # sequences using an imported function.
 def generate_from_args(
     num_people: int = None,
@@ -818,7 +1128,9 @@ def generate_from_args(
         return sequences
     else:
         if num_people is None or num_edges is None:
-            raise ValueError("num_people and num_edges are required for regular dataset generation")
+            raise ValueError(
+                "num_people and num_edges are required for regular dataset generation"
+            )
         max_edges = num_people * (num_people - 1)
         if num_edges > max_edges:
             print(f"warn: num_edges ({num_edges}) is very high relative to num_people")
@@ -827,6 +1139,7 @@ def generate_from_args(
             raise ValueError("duplicate-likelihood must be between 0.0 and 1.0")
         generate_dataset(num_people, num_edges, output, duplicate_likelihood)
         return output
+
 
 if __name__ == "__main__":
     main()
