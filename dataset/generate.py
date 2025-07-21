@@ -22,7 +22,7 @@ import uuid
 import random
 import argparse
 
-from data import *
+from dataset.data import *
 
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple
