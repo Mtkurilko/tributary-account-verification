@@ -49,18 +49,31 @@ if len(usernames) >= 2:
     actor = col1.selectbox("Acting User", usernames)
     target = col2.selectbox("Target User", [u for u in usernames if u != actor])
 
-    col3, col4, col5 = st.columns(3)
+    col3, col4, col5, col6 = st.columns(4)
     if col3.button("Vet"):
-        trust_system.vet_user(by=actor, target=target)
-        st.success(f"{actor} vetted {target}")
+        vet_result = trust_system.vet_user(by=actor, target=target)
+        if vet_result:
+            st.success(f"{actor} vetted {target}")
+        else:
+            st.warning(f"{actor} has already vetted or denied vetting {target}")
 
-    if col4.button("Accept"):
+    if col4.button("Deny Vet"):
+        deny_result = trust_system.deny_vet_user(by=actor, target=target)
+        if deny_result:
+            st.success(f"{actor} denied vetting {target}")
+        else:
+            st.warning(f"{actor} has already vetted or denied vetting {target}")
+
+    if col5.button("Accept"):
         trust_system.accept_user(by=actor, target=target)
         st.success(f"{actor} accepted {target}")
 
-    if col5.button("Report"):
-        trust_system.report_user(by=actor, target=target)
-        st.warning(f"{actor} reported {target}")
+    if col6.button("Report"):
+        worked = trust_system.report_user(by=actor, target=target)
+        if worked:
+            st.success(f"{actor} reported {target}")
+        else:
+            st.warning(f"{actor} is either flagged as a spammer or has already reported {target}.")
 
 else:
     st.info("Add at least two users to begin simulating interactions.")
@@ -70,7 +83,7 @@ st.subheader("User Trust Overview")
 
 for username in usernames:
     user = trust_system.get_user(username)
-    trust = user.get_recent_trust()
+    trust = user.trust_score
     with st.expander(f"{username} — Trust Score: {trust}"):
         st.text("Interaction Log:")
         if user.interactions:
