@@ -22,6 +22,28 @@ MIN_DEATH_AGE_YEARS = 20
 MAX_DEATH_AGE_YEARS = 100
 SEQUENCE_TIME_INCREMENT_DAYS = 30
 
+# connection generation constants
+CONNECTION_TYPE_RATIOS = {
+    "family": 0.25,        # family relationships
+    "geographic": 0.35,    # people in same cities
+    "age_cohort": 0.20,    # people of similar ages
+    "workplace": 0.15,     # people with same email domain
+    "small_world": 0.05,   # random long-distance connections
+}
+
+# clustering parameters
+CONSUMER_EMAIL_DOMAINS = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com"]
+CONSUMER_EMAIL_WEIGHT = 0.3    # lower connection probability for consumer emails
+WORKPLACE_EMAIL_WEIGHT = 2.0   # higher connection probability for workplace emails
+
+# family relationship parameters  
+PARENT_CHILD_MIN_AGE_DIFF = 15
+PARENT_CHILD_MAX_AGE_DIFF = 50
+SIBLING_MAX_AGE_DIFF = 15
+SPOUSE_MAX_AGE_DIFF = 10
+SPOUSE_CONNECTION_CHANCE = 0.1
+GENERATION_AGE_GAP = 20
+
 # email TLDs
 EMAIL_DOMAINS = [
     "gmail.com",

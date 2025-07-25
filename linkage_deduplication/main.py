@@ -9,6 +9,10 @@ import sys
 import csv
 import math
 
+import collections
+import collections.abc
+collections.Container = collections.abc.Container
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from linkage_deduplication.evaluation_models.fellegi_sunter import fellegi_sunter_probability as fs_prob
@@ -17,8 +21,8 @@ from linkage_deduplication.Subject import Subject
 from linkage_deduplication import ingest
 from linkage_deduplication.evaluation_models.gradient_model import GradientModel
 
-def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "transformer": None}, 
-        loadPath={"gradient": None, "transformer": None}, doTrainModel={"gradient": None, "transformer": None}, 
+def main(modelRequested="2", jsonPath="./dataset/train.json", doLoadModel={"gradient": None, "transformer": True}, 
+        loadPath={"gradient": None, "transformer": "./ercl_transfromer_weights.npz"}, doTrainModel={"gradient": None, "transformer": True}, 
         doSaveModel={"gradient": None, "transformer": None}, savePath={"gradient": None, "transformer": None}, trainParams={}):
     '''
     # Example subjects
@@ -74,15 +78,26 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
     # Load subjects and pairs from dataset with multiprocessing support
     subjects, subject_pairs = ingest.ingest_data(path, use_multiprocessing=True)
 
+<<<<<<< HEAD
+    labels = ingest.obtain_subject_labels(subject_pairs)  # Obtain labels for the subject pairs
+
+    n_subjects = ingest.get_len_data(path)
+=======
     # Obtain labels for the subject pairs with multiprocessing support  
     labels = ingest.obtain_subject_labels(subject_pairs, use_multiprocessing=True)
+>>>>>>> main
     
     # Initialize results list to store output
     results = []
     
     # Set CONSTANTS for the TransformerModel & GradientModel
+<<<<<<< HEAD
+    EPOCHS_CONSTANT = trainParams.get("epochs", 300)  # Number of epochs for training the TransformerModel
+    LEARNING_RATE_CONSTANT = trainParams.get("lr", 1e-4)  # Learning rate for training the TransformerModel
+=======
     EPOCHS_CONSTANT = trainParams.get("epochs", 10)  # Number of epochs for training the TransformerModel
     LEARNING_RATE_CONSTANT = trainParams.get("lr", 1e-6)  # Learning rate for training the TransformerModel
+>>>>>>> main
     RUN_ON = "cuda"  # Device to run the model on, change to "cuda" if you have a GPU available
 
     # Ask the user if they want to use the TransformerModel
@@ -167,6 +182,8 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
 
     elif model_requested == 2:
         model = TransformerModel()
+        model.to("cuda")
+        print("Model on:", next(model.parameters()).device)
 
         if doLoadModel.get("transformer") is not None:
             load_model = ('y' if doLoadModel.get("transformer") == True else 'n')
@@ -189,6 +206,10 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
             train_model = input("Do you want to train the TransformerModel? (Y/N): ").strip().lower()
 
         if train_model == 'y':
+<<<<<<< HEAD
+            model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
+                                    lr=LEARNING_RATE_CONSTANT, device=RUN_ON, max_samples=(n_subjects * (n_subjects - 1) // 2))
+=======
             # Add debug mode option for transformer training
             debug_mode = input("Enable debug mode to see timing info? (Y/N): ").strip().lower() == 'y'
             use_preencoded = input("Use pre-encoded dataset for maximum efficiency? (Y/N): ").strip().lower() == 'y'
@@ -200,17 +221,18 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
             else:
                 model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
                                         lr=LEARNING_RATE_CONSTANT, device=RUN_ON, debug_mode=debug_mode, use_preencoded=use_preencoded)
+>>>>>>> main
 
             if doSaveModel.get("transformer") is not None:
                 save_model = ('y' if doSaveModel.get("transformer") == True else 'n')
             else:
-                save_model = input("Do you want to save the trained TransformerModel? (Y/N): ").strip().lower()
+                save_model = ("y").strip().lower()
 
             if save_model == 'y':
                 if savePath.get("transformer") is not None:
                     path = savePath.get("transformer")
                 else:
-                    path = input("Enter the path to save the TransformerModel: ").strip()
+                    path = "ercl_transformer_weights.npz"
 
                 model.save(path)
                 print(f"TransformerModel saved to {path}")
