@@ -75,18 +75,29 @@ def main(modelRequested="2", jsonPath="./dataset/train.json", doLoadModel={"grad
     else:
         path = input("Enter the path to the dataset (dataset.json): ").strip()
 
-    subjects, subject_pairs  = ingest.ingest_data(path)  # Load subjects and pairs from dataset
+    # Load subjects and pairs from dataset with multiprocessing support
+    subjects, subject_pairs = ingest.ingest_data(path, use_multiprocessing=True)
 
+<<<<<<< HEAD
     labels = ingest.obtain_subject_labels(subject_pairs)  # Obtain labels for the subject pairs
 
     n_subjects = ingest.get_len_data(path)
+=======
+    # Obtain labels for the subject pairs with multiprocessing support  
+    labels = ingest.obtain_subject_labels(subject_pairs, use_multiprocessing=True)
+>>>>>>> main
     
     # Initialize results list to store output
     results = []
     
     # Set CONSTANTS for the TransformerModel & GradientModel
+<<<<<<< HEAD
     EPOCHS_CONSTANT = trainParams.get("epochs", 300)  # Number of epochs for training the TransformerModel
     LEARNING_RATE_CONSTANT = trainParams.get("lr", 1e-4)  # Learning rate for training the TransformerModel
+=======
+    EPOCHS_CONSTANT = trainParams.get("epochs", 10)  # Number of epochs for training the TransformerModel
+    LEARNING_RATE_CONSTANT = trainParams.get("lr", 1e-6)  # Learning rate for training the TransformerModel
+>>>>>>> main
     RUN_ON = "cuda"  # Device to run the model on, change to "cuda" if you have a GPU available
 
     # Ask the user if they want to use the TransformerModel
@@ -195,8 +206,22 @@ def main(modelRequested="2", jsonPath="./dataset/train.json", doLoadModel={"grad
             train_model = input("Do you want to train the TransformerModel? (Y/N): ").strip().lower()
 
         if train_model == 'y':
+<<<<<<< HEAD
             model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
                                     lr=LEARNING_RATE_CONSTANT, device=RUN_ON, max_samples=(n_subjects * (n_subjects - 1) // 2))
+=======
+            # Add debug mode option for transformer training
+            debug_mode = input("Enable debug mode to see timing info? (Y/N): ").strip().lower() == 'y'
+            use_preencoded = input("Use pre-encoded dataset for maximum efficiency? (Y/N): ").strip().lower() == 'y'
+            use_old_style = input("Use old-style training approach (fallback for CUDA issues)? (Y/N): ").strip().lower() == 'y'
+            
+            if use_old_style:
+                model.train_transformer_old_style(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
+                                                lr=LEARNING_RATE_CONSTANT, device=RUN_ON)
+            else:
+                model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
+                                        lr=LEARNING_RATE_CONSTANT, device=RUN_ON, debug_mode=debug_mode, use_preencoded=use_preencoded)
+>>>>>>> main
 
             if doSaveModel.get("transformer") is not None:
                 save_model = ('y' if doSaveModel.get("transformer") == True else 'n')
@@ -309,10 +334,19 @@ def main(modelRequested="2", jsonPath="./dataset/train.json", doLoadModel={"grad
 
         if train_model_transformer == 'y':
             # Subject pair arew tuples of (subject1, subject2) and already created
-
-            #Train the model with the subject pairs and labels
-            transformer_model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
-                                                lr=LEARNING_RATE_CONSTANT, device=RUN_ON)
+            
+            # Add debug mode option for transformer training
+            debug_mode = input("Enable debug mode to see timing info? (Y/N): ").strip().lower() == 'y'
+            use_preencoded = input("Use pre-encoded dataset for maximum efficiency? (Y/N): ").strip().lower() == 'y'
+            use_old_style = input("Use old-style training approach (fallback for CUDA issues)? (Y/N): ").strip().lower() == 'y'
+            
+            if use_old_style:
+                transformer_model.train_transformer_old_style(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
+                                                            lr=LEARNING_RATE_CONSTANT, device=RUN_ON)
+            else:
+                #Train the model with the subject pairs and labels
+                transformer_model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
+                                                    lr=LEARNING_RATE_CONSTANT, device=RUN_ON, debug_mode=debug_mode, use_preencoded=use_preencoded)
 
             # Save the trained model (WHEN READY)
             if doSaveModel.get("transformer") is not None:

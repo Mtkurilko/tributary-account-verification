@@ -93,7 +93,11 @@ class TransformerModel(nn.Module):
         x = self._ffn(x).to(device)
         return x.mean(dim=0)
 
+<<<<<<< HEAD
     def transformer_similarity(self, subject1, subject2):
+=======
+    def transformer_similarity(self, subject1, subject2, device=None):
+>>>>>>> main
         s1 = " ".join([str(getattr(subject1, f, "")) for f in self.feature_list])
         s2 = " ".join([str(getattr(subject2, f, "")) for f in self.feature_list])
         if device is None:

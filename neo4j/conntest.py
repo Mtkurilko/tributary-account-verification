@@ -18,7 +18,7 @@ with GraphDatabase.driver(URI, auth=AUTH) as driver:
             #"""MATCH (n) WHERE n.name IS NOT NULL RETURN n.name AS name""",
             """
             Match (n:User)
-            RETURN n LIMIT 25;
+            RETURN n LIMIT 1;
             """,
             database_="neo4j",
     )
