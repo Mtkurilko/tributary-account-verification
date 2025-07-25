@@ -8,6 +8,7 @@ import os
 import sys
 import csv
 import math
+from xml.parsers.expat import model
 
 import collections
 import collections.abc
@@ -21,8 +22,8 @@ from linkage_deduplication.Subject import Subject
 from linkage_deduplication import ingest
 from linkage_deduplication.evaluation_models.gradient_model import GradientModel
 
-def main(modelRequested="2", jsonPath="./dataset/train.json", doLoadModel={"gradient": None, "transformer": True}, 
-        loadPath={"gradient": None, "transformer": "./ercl_transfromer_weights.npz"}, doTrainModel={"gradient": None, "transformer": True}, 
+def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "transformer": None}, 
+        loadPath={"gradient": None, "transformer": None}, doTrainModel={"gradient": None, "transformer": None}, doRunModel=None,
         doSaveModel={"gradient": None, "transformer": None}, savePath={"gradient": None, "transformer": None}, trainParams={}):
     '''
     # Example subjects
@@ -152,33 +153,34 @@ def main(modelRequested="2", jsonPath="./dataset/train.json", doLoadModel={"grad
                 model.save(path)
                 print(f"GradientModel saved to {path}")
 
-        # Print loading message
-        print("Running Gradient-Boosted Model...")
+        if doRunModel == 'y' or doRunModel is None:
+            # Print loading message
+            print("Running Gradient-Boosted Model...")
 
-        # Calculate gradient-boosted scores for all subject pairs
-        gb_scores = model.batch_gradient_boosted_score(subject_pairs)
+            # Calculate gradient-boosted scores for all subject pairs
+            gb_scores = model.batch_gradient_boosted_score(subject_pairs)
 
-        # Run through each pair of subjects in the dataset
-        for i, (subject1, subject2) in enumerate(subject_pairs):
-            # Calculate the gradient-boosted score
-            gb_score = math.floor((gb_scores[i])*10000) / 10000.0  # Round to 4 decimal places
-            
-            is_match = labels[i] == 1
-            base_id = subject2.attributes.get('base_id') if is_match else ""
+            # Run through each pair of subjects in the dataset
+            for i, (subject1, subject2) in enumerate(subject_pairs):
+                # Calculate the gradient-boosted score
+                gb_score = math.floor((gb_scores[i])*10000) / 10000.0  # Round to 4 decimal places
+                
+                is_match = labels[i] == 1
+                base_id = subject2.attributes.get('base_id') if is_match else ""
 
-            # Append results to the list
-            results.append({
-                "Row": i + 1,
-                "Subject1_UUID": subject1.attributes.get('uuid'),
-                "Subject2_UUID": subject2.attributes.get('uuid'),
-                "Gradient_Boosted_Score": gb_score,
-                "Transformer_Similarity_Score": "",
-                "Felligi_Sunter_Similarity_Score": "",
-                "Match": "Yes" if is_match else "No",
-                "Base_ID": base_id
-            })
+                # Append results to the list
+                results.append({
+                    "Row": i + 1,
+                    "Subject1_UUID": subject1.attributes.get('uuid'),
+                    "Subject2_UUID": subject2.attributes.get('uuid'),
+                    "Gradient_Boosted_Score": gb_score,
+                    "Transformer_Similarity_Score": "",
+                    "Felligi_Sunter_Similarity_Score": "",
+                    "Match": "Yes" if is_match else "No",
+                    "Base_ID": base_id
+                })
 
-        to_csv(results)  # Save results to CSV
+            to_csv(results)  # Save results to CSV
 
     elif model_requested == 2:
         model = TransformerModel()
@@ -206,22 +208,8 @@ def main(modelRequested="2", jsonPath="./dataset/train.json", doLoadModel={"grad
             train_model = input("Do you want to train the TransformerModel? (Y/N): ").strip().lower()
 
         if train_model == 'y':
-<<<<<<< HEAD
             model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
-                                    lr=LEARNING_RATE_CONSTANT, device=RUN_ON, max_samples=(n_subjects * (n_subjects - 1) // 2))
-=======
-            # Add debug mode option for transformer training
-            debug_mode = input("Enable debug mode to see timing info? (Y/N): ").strip().lower() == 'y'
-            use_preencoded = input("Use pre-encoded dataset for maximum efficiency? (Y/N): ").strip().lower() == 'y'
-            use_old_style = input("Use old-style training approach (fallback for CUDA issues)? (Y/N): ").strip().lower() == 'y'
-            
-            if use_old_style:
-                model.train_transformer_old_style(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
-                                                lr=LEARNING_RATE_CONSTANT, device=RUN_ON)
-            else:
-                model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
-                                        lr=LEARNING_RATE_CONSTANT, device=RUN_ON, debug_mode=debug_mode, use_preencoded=use_preencoded)
->>>>>>> main
+                                    lr=LEARNING_RATE_CONSTANT, device=RUN_ON, debug_mode=debug_mode, use_preencoded=use_preencoded)
 
             if doSaveModel.get("transformer") is not None:
                 save_model = ('y' if doSaveModel.get("transformer") == True else 'n')
@@ -236,6 +224,34 @@ def main(modelRequested="2", jsonPath="./dataset/train.json", doLoadModel={"grad
 
                 model.save(path)
                 print(f"TransformerModel saved to {path}")
+
+        if doRunModel == 'y' or doRunModel is None:
+            # Print loading message
+            print("Running Transformer Model...")
+
+            # Run through each pair of subjects in the dataset
+            for i, (subject1, subject2) in enumerate(subject_pairs):
+                # Calculate the transformer similarity score
+                transformer_score = math.floor(
+                    transformer_model.transformer_similarity(subject1, subject2)*10000
+                    ) / 10000.0  # Round to 4 decimal places
+                
+                is_match = labels[i] == 1
+                base_id = subject2.attributes.get('base_id') if is_match else ""
+
+                # Append results to the list
+                results.append({
+                    "Row": i + 1,
+                    "Subject1_UUID": subject1.attributes.get('uuid'),
+                    "Subject2_UUID": subject2.attributes.get('uuid'),
+                    "Gradient_Boosted_Score": "",
+                    "Transformer_Similarity_Score": transformer_score,
+                    "Felligi_Sunter_Similarity_Score": "",
+                    "Match": "Yes" if is_match else "No",
+                    "Base_ID": base_id
+                })
+
+            to_csv(results)  # Save results to CSV
 
     elif model_requested == 3:
         # Print loading message
@@ -363,43 +379,44 @@ def main(modelRequested="2", jsonPath="./dataset/train.json", doLoadModel={"grad
                 transformer_model.save(path)
                 print(f"TransformerModel saved to {path}")
 
-        # Print loading message
-        print("Running all models...")
+        if doRunModel == 'y' or doRunModel is None:
+            # Print loading message
+            print("Running all models...")
 
-        # Calculate gradient-boosted scores for all subject pairs
-        gb_scores = gradient_model.batch_gradient_boosted_score(subject_pairs)
+            # Calculate gradient-boosted scores for all subject pairs
+            gb_scores = gradient_model.batch_gradient_boosted_score(subject_pairs)
 
-        # Run through each pair of subjects in the dataset
-        for i, (subject1, subject2) in enumerate(subject_pairs):
-            # Calculate the gradient-boosted score
-            gb_score = math.floor(gb_scores[i] * 10000) / 10000.0  # Round to 4 decimal places
+            # Run through each pair of subjects in the dataset
+            for i, (subject1, subject2) in enumerate(subject_pairs):
+                # Calculate the gradient-boosted score
+                gb_score = math.floor(gb_scores[i] * 10000) / 10000.0  # Round to 4 decimal places
 
-            # Calculate the transformer similarity score
-            transformer_score = math.floor(
-                transformer_model.transformer_similarity(subject1, subject2)*10000
-                ) / 10000.0  # Round to 4 decimal places
+                # Calculate the transformer similarity score
+                transformer_score = math.floor(
+                    transformer_model.transformer_similarity(subject1, subject2)*10000
+                    ) / 10000.0  # Round to 4 decimal places
 
-            # Calculate Fellegi-Sunter probability
-            probability = math.floor(
-                fs_prob(subject1, subject2, m_probs, u_probs)*10000
-                ) / 10000.0  # Round to 4 decimal places
+                # Calculate Fellegi-Sunter probability
+                probability = math.floor(
+                    fs_prob(subject1, subject2, m_probs, u_probs)*10000
+                    ) / 10000.0  # Round to 4 decimal places
 
-            is_match = labels[i] == 1
-            base_id = subject2.attributes.get('base_id') if is_match else ""
+                is_match = labels[i] == 1
+                base_id = subject2.attributes.get('base_id') if is_match else ""
 
-            # Append results to the list
-            results.append({
-                "Row": i + 1,
-                "Subject1_UUID": subject1.attributes.get('uuid'),
-                "Subject2_UUID": subject2.attributes.get('uuid'),
-                "Gradient_Boosted_Score": gb_score,
-                "Transformer_Similarity_Score": transformer_score,
-                "Felligi_Sunter_Similarity_Score": probability,
-                "Match": "Yes" if is_match else "No",
-                "Base_ID": base_id
-            })
+                # Append results to the list
+                results.append({
+                    "Row": i + 1,
+                    "Subject1_UUID": subject1.attributes.get('uuid'),
+                    "Subject2_UUID": subject2.attributes.get('uuid'),
+                    "Gradient_Boosted_Score": gb_score,
+                    "Transformer_Similarity_Score": transformer_score,
+                    "Felligi_Sunter_Similarity_Score": probability,
+                    "Match": "Yes" if is_match else "No",
+                    "Base_ID": base_id
+                })
 
-        to_csv(results)  # Save results to CSV
+            to_csv(results)  # Save results to CSV
 
 
 def to_csv(results, output_path="results.csv"):
@@ -444,3 +461,4 @@ def module_run(modelRequested, jsonPath, doLoadModel={"gradient": False, "transf
 
 if __name__ == "__main__":
     main()
+

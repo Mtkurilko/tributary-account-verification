@@ -233,3 +233,4 @@ model.load("transformer_weights.npz")
 score = model.transformer_similarity(subject1, subject2)
 print("Similarity score:", score)
 """
+
