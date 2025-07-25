@@ -1,4 +1,5 @@
 """
+Author: Thomas Bruce and Michael Kurilko
 gradient boosted tree comparison model
 """
 

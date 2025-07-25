@@ -1,6 +1,6 @@
 # Tributary Account Verification
 
-A research and benchmarking suite for evaluating and developing account linkage and deduplication models, with a focus on realistic synthetic data, graph-based identity structures, and interactive model evaluation.
+A comprehensive research and benchmarking suite for evaluating, developing, and visualizing account linkage, deduplication, and trust models on realistic synthetic identity graphs.
 
 **Authors:** Michael Kurilko, Thomas Bruce  
 **Date:** 2025
@@ -9,20 +9,47 @@ A research and benchmarking suite for evaluating and developing account linkage 
 
 ## Overview
 
-This repository provides tools for generating realistic synthetic identity datasets, running and evaluating multiple linkage/deduplication models, and visualizing results. It is designed for research and benchmarking in the context of the [Tributary](https://atributary.com) project, but is general enough for broader use in entity resolution and identity graph research.
+Tributary Account Verification is a modular platform for identity graph research, entity resolution, and trust modeling. It is designed for research and benchmarking in the context of the [Tributary](https://atributary.com) project, but is general enough for broader use in entity resolution and identity graph research.
+It provides:
+
+- **Synthetic data generation** with realistic family and social structures
+- **Custom graph database** for scalable, flexible experimentation
+- **Multiple linkage/deduplication models** (Gradient Boosted, Transformer, Fellegi-Sunter, Composite)
+- **Interactive dashboards** for model evaluation and trust simulation
+- **SybilRank, Limit, and Guard Implementations** for evaluation on a slow mixing social network like Tributary
+- **Rich visualizations** for both graph structure and model results
+
+This project is designed for both academic research and practical benchmarking, and is extensible for new models, features, and datasets.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Repository Structure](#repository-structure)
+- [Getting Started](#getting-started)
+- [Dashboards & Visualizations](#dashboards--visualizations)
+- [Model Evaluation](#model-evaluation)
+- [Trust System](#trust-system)
+- [Graph Database](#graph-database)
+- [Customization & Extensibility](#customization--extensibility)
+- [Credits](#credits)
+- [Contact](#contact)
 
 ---
 
 ## Features
 
 - **Synthetic Dataset Generation:**  
-  Easily create datasets with configurable duplicate likelihood, realistic family structures, and identity evolution sequences.
-- **Graph Database:**  
-  Lightweight, JSON-based graph database for storing and manipulating identity graphs.
+  Create datasets with configurable duplicate likelihood, realistic family trees, and identity evolution sequences.
+- **Custom Graph Database:**  
+  Lightweight, JSON-based, and supports arbitrary metadata for nodes and edges.
 - **Model Evaluation Dashboard:**  
-  Streamlit app for running, training, and comparing multiple models (Gradient Boosted, Transformer, Fellegi-Sunter).
-- **Interactive Visualization:**  
-  Explore the generated identity graphs with a searchable, interactive HTML visualization.
+  Streamlit app for running, training, and comparing multiple models with real-time feedback.
+- **Trust System:**  
+  Simulate and visualize user trust dynamics and reputation in a social network.
+- **Interactive Graph Visualization:**  
+  Explore generated identity graphs and model results with a custom, searchable HTML interface.
 - **Extensible Model Framework:**  
   Plug in new models or adjust existing ones for rapid experimentation.
 
@@ -41,7 +68,7 @@ tributary-account-verification/
 │   └── README.md
 │
 ├── db/
-│   ├── gdb.py              # Lightweight graph database implementation
+│   ├── gdb.py              # Custom graph database implementation
 │   └── README.md
 │
 ├── linkage_deduplication/
@@ -54,13 +81,25 @@ tributary-account-verification/
 │   ├── gradient/
 │   │   └── gradient_weights.npz
 │   └── transformer/
-│       ├── 200people20epoch.npz
-│       └── 500people15epoch.npz
+│       ├── Avant-0.0.1.npz
 │
-├── web.py                  # Streamlit dashboard for interactive evaluation
+├── trust_system/
+│   ├── run.py              # Streamlit dashboard for trust simulation
+│   ├── system.py           # Core trust logic and data structures
+│   ├── trust_state.json    # (Generated) Exported trust state
+│   └── README.md
+│
+├── sybil/
+│   ├── sybilguard/         # SybilGuard implementation
+│   ├── sybillimit/         # SybilLimit implementation
+│   └── sybilrank/          # SybilRank implementation
+│
+├── web.py                  # Streamlit dashboard for model evaluation
 ├── visualize.py            # Graph visualization utilities
 ├── graph.html              # Generated interactive graph visualization
 ├── requirements.txt        # Python dependencies
+├── train.py                # Example script for model training
+├── cleanup.sh              # Utility script to clean up generated files
 └── README.md               # This file
 ```
 
@@ -94,7 +133,7 @@ python generate.py --sequence 100 --steps 5 -o sequences.json
 **From Streamlit Dashboard:**  
 Use the "Generate Synthetic Dataset" toggle in the sidebar to create and use a new dataset interactively.
 
-### 3. Run the Streamlit Dashboard
+### 3. Run the Model Evaluation Dashboard
 
 ```bash
 streamlit run web.py
@@ -113,37 +152,87 @@ python visualize.py dataset/dataset.json
 # Produces graph.html for interactive exploration
 ```
 
+### 5. Run the Trust System Dashboard
+
+```bash
+cd trust_system
+streamlit run run.py
+```
+
+- Add users, simulate trust interactions, and export/import trust states.
+
+---
+
+## Dashboards & Visualizations
+
+### Model Evaluation Dashboard (`web.py`)
+
+> _**[Insert Screenshot Here]**_  
+> _A Streamlit dashboard for running, training, and comparing linkage/deduplication models. View model accuracy, download results, and interact with the graph._
+
+### Trust System Dashboard (`trust_system/run.py`)
+
+> _**[Insert Screenshot Here]**_  
+> _Simulate user vetting, acceptance, and reporting. Visualize trust scores and detect spammy behavior in a social network._
+
+### Graph Visualization (`graph.html`)
+
+> _**[Insert Screenshot Here]**_  
+> _Interactive HTML visualization of the identity graph. Search for nodes by ID, explore connections, and view node metadata._
+
 ---
 
 ## Model Evaluation
 
-- **Gradient Boosted Model**
-- **Transformer Model**
-- **Fellegi-Sunter Model**
-- **All Models** (run and compare all at once)
+- **Gradient Boosted Model:**  
+  Fast, interpretable, and robust for tabular features.
+- **Transformer Model:**  
+  Deep learning model for complex, sequence-based or high-dimensional features.
+- **Fellegi-Sunter Model:**  
+  Probabilistic record linkage using field-wise match probabilities.
+- **Composite Model:**  
+  Combines multiple model scores for improved accuracy.
 
 You can train models, load pre-trained weights, and save new weights. Results are shown in the dashboard, including per-model accuracy and downloadable CSVs.
 
 ---
 
+## Trust System
+
+The trust system simulates user reputation and trust dynamics in a social or collaborative environment.
+
+- **Add users** and simulate interactions (vet, deny, accept, report)
+- **Trust scores** evolve based on actions and system rules
+- **Spam detection** flags users who abuse reporting or acceptance
+- **Export/import** trust states for reproducibility
+
+See [`trust_system/README.md`](trust_system/README.md) for full details.
+
+---
+
 ## Graph Database
 
-The `db/gdb.py` module provides a simple, in-memory graph database with:
+The custom graph database (`db/gdb.py`) provides:
 
-- Node/edge operations
-- Metadata support
-- Persistence to/from JSON
-- Query and statistics utilities
+- **Node/edge operations:** Add, remove, and query nodes/edges with arbitrary metadata
+- **Directed/undirected edges:** Flexible relationship modeling
+- **Persistence:** Save/load graphs as JSON
+- **Query/statistics utilities:** Neighbors, paths, counts, etc.
 
-See [`db/README.md`](db/README.md) for API details.
+See [`db/README.md`](db/README.md) for API and usage examples.
 
 ---
 
 ## Customization & Extensibility
 
-- Add new models in `linkage_deduplication/evaluation_models/`
-- Adjust dataset generation logic in `dataset/generate.py`
-- Tweak visualization in `visualize.py`
+- **Add new models:**  
+  Place your model in `linkage_deduplication/evaluation_models/` and register it in `main.py`.
+- **Adjust dataset generation:**  
+  Edit `dataset/generate.py` for new features, family structures, or synthetic data logic.
+- **Tweak visualization:**  
+  Modify `visualize.py` for custom graph layouts, node coloring, or metadata display.
+- **Trust system rules:**  
+  Tune trust gain/loss, spam thresholds, and scaling in `trust_system/system.py`.
 
 ---
 
@@ -163,11 +252,15 @@ generate_from_args(sequence=5, steps=10, output="myseq.json")
 
 ## Credits
 
-- **Michael Kurilko** — dashboard, tranformer/felligi-sunter development, model integration, evaluation framework
+- **Michael Kurilko** — dashboard, transformer/fellegi-sunter development, model integration, evaluation framework
 - **Thomas Bruce** — synthetic data generation, graph database, family structure modeling
 
 ---
 
 ## Contact
 
-For questions or contributions, please open an issue or contact the authors.
+For questions, contributions, or collaboration, please open an issue or contact the authors.
+
+---
+
+> _**[Leave space here for images of the trust dashboard, web.py dashboard, and graph results]**_

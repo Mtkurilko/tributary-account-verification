@@ -2,6 +2,9 @@
 Author: Michael Kurilko
 Date: 7/21/2025
 Description: This script contains the trust quantifiers and their evaluation.
+It defines the TrustSystem class, which manages users, their trust scores, and interactions.
+It includes methods for adding users, vetting, reporting, accepting users, and managing trust scores.
+The trust system also supports importing and exporting its state to/from a JSON file.
 '''
 
 from dataclasses import dataclass, field

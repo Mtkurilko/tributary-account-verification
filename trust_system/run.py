@@ -2,6 +2,13 @@
 Author: Michael Kurilko
 Date: 7/21/2025
 Description: The file that runs the representation of the trust system.
+This file provides a Streamlit dashboard for user interactions within the trust system.
+It allows users to add new users, simulate interactions (vetting, accepting, reporting), and
+view trust scores and interaction history.
+It also includes functionality for importing and exporting the trust system state to/from a JSON file.
+This file is the main entry point for the Streamlit app.
+
+Run by executing `streamlit run run.py` in the terminal.
 '''
 
 import streamlit as st

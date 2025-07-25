@@ -2,6 +2,12 @@
 Author: Michael Kurilko
 Date: 6/6/2025
 Description: Streamlit dashboard for linkage & deduplication model evaluation.
+This dashboard allows users to run models, visualize results, and download trained models.
+It includes options for generating synthetic datasets, training models, and visualizing results.
+It also provides a user-friendly interface for selecting models, adjusting parameters, and viewing accuracies.
+This file is the main entry point for the Streamlit app.
+
+Run by executing `streamlit run web.py` in the terminal.
 '''
 
 import streamlit as st
@@ -271,12 +277,14 @@ with right_col:
 MODEL_COLUMNS = {
     "Gradient_Boosted_Score": "Gradient Model",
     "Transformer_Similarity_Score": "Transformer Model",
-    "Felligi_Sunter_Similarity_Score": "Fellegi-Sunter Model"
+    "Felligi_Sunter_Similarity_Score": "Fellegi-Sunter Model",
+    "Composite_Score": "Composite Score"
 }
 MODEL_COLORS = {
     "Gradient_Boosted_Score": "#4CAF50",
     "Transformer_Similarity_Score": "#2196F3",
-    "Felligi_Sunter_Similarity_Score": "#FF9800"
+    "Felligi_Sunter_Similarity_Score": "#FF9800",
+    "Composite_Score": "#9C27B0"
 }
 
 if os.path.exists("results.csv"):

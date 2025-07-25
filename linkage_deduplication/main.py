@@ -16,6 +16,8 @@ collections.Container = collections.abc.Container
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import joblib
+import numpy as np
 from linkage_deduplication.evaluation_models.fellegi_sunter import fellegi_sunter_probability as fs_prob
 from linkage_deduplication.evaluation_models.transformer_model import TransformerModel
 from linkage_deduplication.Subject import Subject
@@ -79,27 +81,16 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
     # Load subjects and pairs from dataset with multiprocessing support
     subjects, subject_pairs = ingest.ingest_data(path, use_multiprocessing=True)
 
-<<<<<<< HEAD
-    labels = ingest.obtain_subject_labels(subject_pairs)  # Obtain labels for the subject pairs
-
-    n_subjects = ingest.get_len_data(path)
-=======
     # Obtain labels for the subject pairs with multiprocessing support  
     labels = ingest.obtain_subject_labels(subject_pairs, use_multiprocessing=True)
->>>>>>> main
     
     # Initialize results list to store output
     results = []
     
     # Set CONSTANTS for the TransformerModel & GradientModel
-<<<<<<< HEAD
-    EPOCHS_CONSTANT = trainParams.get("epochs", 300)  # Number of epochs for training the TransformerModel
-    LEARNING_RATE_CONSTANT = trainParams.get("lr", 1e-4)  # Learning rate for training the TransformerModel
-=======
-    EPOCHS_CONSTANT = trainParams.get("epochs", 10)  # Number of epochs for training the TransformerModel
-    LEARNING_RATE_CONSTANT = trainParams.get("lr", 1e-6)  # Learning rate for training the TransformerModel
->>>>>>> main
-    RUN_ON = "cuda"  # Device to run the model on, change to "cuda" if you have a GPU available
+    EPOCHS_CONSTANT = trainParams.get("epochs", 20)  # Number of epochs for training the TransformerModel
+    LEARNING_RATE_CONSTANT = trainParams.get("lr", 2e-5)  # Learning rate for training the TransformerModel
+    RUN_ON = "cpu"  # *** Device to run the model on, change to "cuda" if you have a GPU available ***
 
     # Ask the user if they want to use the TransformerModel
     if modelRequested is not None:
@@ -176,6 +167,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
                     "Gradient_Boosted_Score": gb_score,
                     "Transformer_Similarity_Score": "",
                     "Felligi_Sunter_Similarity_Score": "",
+                    "Composite_Score": "",
                     "Match": "Yes" if is_match else "No",
                     "Base_ID": base_id
                 })
@@ -184,7 +176,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
 
     elif model_requested == 2:
         model = TransformerModel()
-        model.to("cuda")
+        model.to(RUN_ON)
         print("Model on:", next(model.parameters()).device)
 
         if doLoadModel.get("transformer") is not None:
@@ -209,7 +201,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
 
         if train_model == 'y':
             model.train_transformer(subject_pairs, labels, epochs=EPOCHS_CONSTANT, 
-                                    lr=LEARNING_RATE_CONSTANT, device=RUN_ON, debug_mode=debug_mode, use_preencoded=use_preencoded)
+                                    lr=LEARNING_RATE_CONSTANT, device=RUN_ON)
 
             if doSaveModel.get("transformer") is not None:
                 save_model = ('y' if doSaveModel.get("transformer") == True else 'n')
@@ -233,7 +225,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
             for i, (subject1, subject2) in enumerate(subject_pairs):
                 # Calculate the transformer similarity score
                 transformer_score = math.floor(
-                    transformer_model.transformer_similarity(subject1, subject2)*10000
+                    model.transformer_similarity(subject1, subject2)*10000
                     ) / 10000.0  # Round to 4 decimal places
                 
                 is_match = labels[i] == 1
@@ -247,6 +239,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
                     "Gradient_Boosted_Score": "",
                     "Transformer_Similarity_Score": transformer_score,
                     "Felligi_Sunter_Similarity_Score": "",
+                    "Composite_Score": "",
                     "Match": "Yes" if is_match else "No",
                     "Base_ID": base_id
                 })
@@ -275,6 +268,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
                 "Gradient_Boosted_Score": "",
                 "Transformer_Similarity_Score": "",
                 "Felligi_Sunter_Similarity_Score": probability,
+                "Composite_Score": "",
                 "Match": "Yes" if is_match else "No",
                 "Base_ID": base_id
             })
@@ -400,6 +394,21 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
                 probability = math.floor(
                     fs_prob(subject1, subject2, m_probs, u_probs)*10000
                     ) / 10000.0  # Round to 4 decimal places
+                
+                # Calculate Composite Score
+                try:
+                    composite_model = joblib.load("linkage_deduplication/evaluation_models/composite_model.joblib")
+                except FileNotFoundError:
+                    print("Error: composite_model.joblib not found. Make sure you've trained the model first.")
+                    exit()
+
+                input_scores = np.array([[
+                    gb_score,
+                    transformer_score,
+                    probability
+                ]])
+
+                composite_score_probability = composite_model.predict_proba(input_scores)[0][1]
 
                 is_match = labels[i] == 1
                 base_id = subject2.attributes.get('base_id') if is_match else ""
@@ -412,6 +421,7 @@ def main(modelRequested=None, jsonPath=None, doLoadModel={"gradient": None, "tra
                     "Gradient_Boosted_Score": gb_score,
                     "Transformer_Similarity_Score": transformer_score,
                     "Felligi_Sunter_Similarity_Score": probability,
+                    "Composite_Score": composite_score_probability,
                     "Match": "Yes" if is_match else "No",
                     "Base_ID": base_id
                 })
@@ -429,7 +439,7 @@ def to_csv(results, output_path="results.csv"):
         fieldnames = [
             "Row", "Subject1_UUID", "Subject2_UUID",
             "Gradient_Boosted_Score", "Transformer_Similarity_Score",
-            "Felligi_Sunter_Similarity_Score", "Match", "Base_ID"
+            "Felligi_Sunter_Similarity_Score", "Composite_Score", "Match", "Base_ID"
         ]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
@@ -439,7 +449,8 @@ def to_csv(results, output_path="results.csv"):
 
 
 def module_run(modelRequested, jsonPath, doLoadModel={"gradient": False, "transformer": False}, 
-               loadPath={"gradient": None, "transformer": None}, doTrainModel={"gradient": False, "transformer": False}, 
+               loadPath={"gradient": None, "transformer": None}, doTrainModel={"gradient": False, "transformer": False},
+               doRunModel=None,
                doSaveModel={"gradient": False, "transformer": False}, savePath={"gradient": None, "transformer": None},
                trainParams={}):
     '''
@@ -451,11 +462,12 @@ def module_run(modelRequested, jsonPath, doLoadModel={"gradient": False, "transf
     doLoadModel: dict - Dictionary indicating whether to load pre-trained models for Gradient and Transformer models.
     loadPath: dict - Dictionary containing paths to load pre-trained models for Gradient and Transformer models.
     doTrainModel: dict - Dictionary indicating whether to train the Gradient and Transformer models.
+    doRunModel: str - Indicates whether to run the models after training or loading.
     doSaveModel: dict - Dictionary indicating whether to save the trained Gradient and Transformer models.
     savePath: dict - Dictionary containing paths to save the trained Gradient and Transformer models.
     '''
-    main(modelRequested=modelRequested, jsonPath=jsonPath, doLoadModel=doLoadModel, 
-         loadPath=loadPath, doTrainModel=doTrainModel, doSaveModel=doSaveModel, 
+    main(modelRequested=modelRequested, jsonPath=jsonPath, doLoadModel=doLoadModel,
+         loadPath=loadPath, doTrainModel=doTrainModel, doRunModel=doRunModel, doSaveModel=doSaveModel,
          savePath=savePath, trainParams=trainParams)
 
 

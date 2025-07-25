@@ -1,4 +1,5 @@
 """
+Author: Thomas Bruce
 gradient boosted tree implementation for pytorch
 """
 
